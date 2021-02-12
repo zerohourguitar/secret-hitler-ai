@@ -58,6 +58,7 @@ public abstract class WebsocketClientEndpoint {
 	 * @param message
 	 */
 	public void sendMessage(String message) {
+		System.out.println("Sending message: " + message);
 	    this.userSession.getAsyncRemote().sendText(message);
 	}
 	

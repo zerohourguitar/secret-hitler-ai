@@ -6,7 +6,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.Properties;
@@ -16,7 +15,6 @@ import com.fasterxml.jackson.databind.ObjectWriter;
 import com.secrethitler.ai.dtos.LoginRequest;
 import com.secrethitler.ai.dtos.LoginResponse;
 import com.secrethitler.ai.websockets.GameSetupWebsocketClientEndpoint;
-import com.secrethitler.ai.websockets.WebsocketClientEndpoint;
 
 public class SecretHitlerAi {
 	private static final String PROPERTIES_FILE_NAME = "application.properties";
@@ -28,16 +26,19 @@ public class SecretHitlerAi {
 		final String username = args[0];
 		final String password = args[1];
 		final String gameId = args[2];
-		System.out.println("Starting Secret Hitler AI for user " + username + " with gameId " + gameId);
+		final int gameplayLevel = Integer.valueOf(args[3]);
+		System.out.println("Starting Secret Hitler AI for user " + username + " with gameId " + gameId + "and gameplayLevel " + gameplayLevel);
+		
 		prop = new Properties();
 		ClassLoader loader = Thread.currentThread().getContextClassLoader();           
 		InputStream stream = loader.getResourceAsStream(PROPERTIES_FILE_NAME);
 		prop.load(stream);
 		baseUrlString = prop.getProperty("secrethitler.url");
+		
 		final String accessToken = getAuthenticatedAccessToken(username, password);
-       new GameSetupWebsocketClientEndpoint(gameId, accessToken);
+		new GameSetupWebsocketClientEndpoint(gameId, accessToken, gameplayLevel);
         
-       Thread.currentThread().join();
+		Thread.currentThread().join();
 	}
 
 	private static String getAuthenticatedAccessToken(final String username, final String password) throws IOException {

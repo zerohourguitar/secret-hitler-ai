@@ -18,10 +18,12 @@ import com.secrethitler.ai.dtos.GameRequest;
 public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {
 	private String gameId;
 	private String accessToken;
+	private int gameplayLevel;
 	
-	public GameSetupWebsocketClientEndpoint(String gameId, String accessToken) {
+	public GameSetupWebsocketClientEndpoint(String gameId, String accessToken, int gameplayLevel) {
 		this.gameId = gameId;
 		this.accessToken = accessToken;
+		this.gameplayLevel = gameplayLevel;
 		
 		final String gameSetupUrlString = "wss://" + SecretHitlerAi.getBaseUrlString() + SecretHitlerAi.getProp().getProperty("secrethitler.gamesetup.url") +
 				"?gameId=" + gameId + "&auth=" + accessToken;
@@ -47,7 +49,7 @@ public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {
 			GameRequest gameRequest = new ObjectMapper().readValue(message, GameRequest.class);
 			if (gameRequest.isStarted()) {
 				System.out.println("Starting the game!");
-				new GamePlayWebsocketClientEndpoint(gameId, accessToken);
+				new GamePlayWebsocketClientEndpoint(gameId, accessToken, gameplayLevel);
 				userSession.close();
 			}
 		} catch (JsonProcessingException e) {
