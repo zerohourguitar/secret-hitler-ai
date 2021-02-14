@@ -9,6 +9,7 @@ import java.net.HttpURLConnection;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.Properties;
+import java.util.stream.IntStream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
@@ -23,11 +24,9 @@ public class SecretHitlerAi {
 	private static String baseUrlString;
 	
 	public static void main(String[] args) throws IOException, URISyntaxException, InterruptedException {
-		final String username = args[0];
-		final String password = args[1];
-		final String gameId = args[2];
-		final int gameplayLevel = Integer.valueOf(args[3]);
-		System.out.println("Starting Secret Hitler AI for user " + username + " with gameId " + gameId + "and gameplayLevel " + gameplayLevel);
+		final String gameId = args[0];
+		
+		System.out.println("Starting Secret Hitler AI for " + (args.length - 1) + " users with gameId " + gameId);
 		
 		prop = new Properties();
 		ClassLoader loader = Thread.currentThread().getContextClassLoader();           
@@ -35,8 +34,15 @@ public class SecretHitlerAi {
 		prop.load(stream);
 		baseUrlString = prop.getProperty("secrethitler.url");
 		
-		final String accessToken = getAuthenticatedAccessToken(username, password);
-		new GameSetupWebsocketClientEndpoint(gameId, accessToken, gameplayLevel);
+		IntStream.range(1, args.length).forEach(idx -> {
+			try {
+				String accessToken = getAuthenticatedAccessToken("Robot " + idx, "password");
+				new GameSetupWebsocketClientEndpoint(gameId, accessToken, Integer.valueOf(args[idx]));
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		});
+		
         
 		Thread.currentThread().join();
 	}

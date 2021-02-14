@@ -1,5 +1,8 @@
 package com.secrethitler.ai.dtos;
 
+import org.apache.commons.lang3.builder.EqualsBuilder;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
+
 import com.secrethitler.ai.enums.PartyMembership;
 import com.secrethitler.ai.enums.SecretRole;
 import com.secrethitler.ai.enums.Vote;
@@ -81,5 +84,15 @@ public class PlayerData {
 	}
 	public void setVoteReady(boolean voteReady) {
 		this.voteReady = voteReady;
+	}
+	
+	@Override
+	public int hashCode() {
+		return HashCodeBuilder.reflectionHashCode(this);
+	}
+	
+	@Override
+	public boolean equals(Object obj) {
+		return EqualsBuilder.reflectionEquals(this, obj);
 	}
 }

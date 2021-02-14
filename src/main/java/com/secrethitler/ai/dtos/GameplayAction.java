@@ -1,13 +1,24 @@
 package com.secrethitler.ai.dtos;
 
+import com.secrethitler.ai.enums.Action;
+
 public class GameplayAction {
-	private String action;
+	private Action action;
 	private String[] args;
 	
-	public String getAction() {
+	public GameplayAction() {
+		super();
+	}
+	
+	public GameplayAction(Action action, String[] args) {
+		this.action = action;
+		this.args = args;
+	}
+	
+	public Action getAction() {
 		return action;
 	}
-	public void setAction(String action) {
+	public void setAction(Action action) {
 		this.action = action;
 	}
 	public String[] getArgs() {
