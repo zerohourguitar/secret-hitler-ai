@@ -55,6 +55,8 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 				.put(GamePhase.EXAMINE, this::examine)
 				.put(GamePhase.KILL, this::kill)
 				.put(GamePhase.VETO, this::presidentVeto)
+				.put(GamePhase.INVESTIGATE, this::investigate)
+				.put(GamePhase.SPECIAL_ELECTION, this::chooseNextPresidentialCandidate)
 				.build();
 	}
 
@@ -144,7 +146,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		int preferredIndex = policies.indexOf(preferredPolicyToDiscard);
 		int index = preferredIndex == -1 ? 0 : preferredIndex;
 		LOGGER.info(() -> String.format("%s is discarding %s policy", username, policies.get(index).name()));
-		String args[] = {String.valueOf(index)};
+		String[] args = {String.valueOf(index)};
 		return Optional.of(new GameplayAction(Action.PRESIDENT_CHOICE, args));
 	}
 	
@@ -163,7 +165,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		int preferredIndex = policies.indexOf(preferredPolicyToDiscard);
 		int index = preferredIndex == -1 ? 0 : preferredIndex;
 		LOGGER.info(() -> String.format("%s is discarding %s policy", username, policies.get(index).name()));
-		String args[] = {String.valueOf(index)};
+		String[] args = {String.valueOf(index)};
 		return Optional.of(new GameplayAction(Action.CHANCELLOR_CHOICE, args));
 	}
 	
@@ -207,5 +209,45 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		String[] args = {Boolean.toString(concur)};
 		LOGGER.info(() -> String.format("%s is agreeing to the veto", username));
 		return Optional.of(new GameplayAction(Action.PRESIDENT_VETO, args));
+	}
+	
+	protected Optional<GameplayAction> investigate(GameData gameData) {
+		if (!gameData.getMyPlayer().isPresident()) {
+			return Optional.empty();
+		}
+		List<PlayerData> availablePlayers = gameData.getPlayers().stream()
+				.filter(player -> !gameData.getMyPlayer().equals(player))
+				.filter(PlayerData::isAlive)
+				.collect(Collectors.toList());
+		List<PlayerData> preferredPlayers = availablePlayers.stream()
+				.filter(player -> PartyMembership.UNKNOWN != player.getPartyMembership())
+				.collect(Collectors.toList());
+		if (preferredPlayers.isEmpty()) {
+			preferredPlayers = availablePlayers;
+		}
+		PlayerData player = getRandomItemFromList(preferredPlayers);
+		String[] args = {player.getUsername()};
+		return Optional.of(new GameplayAction(Action.INVESTIGATE_PLAYER, args));
+	}
+	
+	protected Optional<GameplayAction> chooseNextPresidentialCandidate(GameData gameData) {
+		if (!gameData.getMyPlayer().isPresident()) {
+			return Optional.empty();
+		}
+		PlayerData myPlayer = gameData.getMyPlayer();
+		List<PlayerData> allPlayers = gameData.getPlayers();
+		List<PlayerData> availablePlayers = allPlayers.stream()
+				.filter(player -> !myPlayer.equals(player))
+				.filter(PlayerData::isAlive)
+				.collect(Collectors.toList());
+		List<PlayerData> preferredPlayers = availablePlayers.stream()
+				.filter(player -> myPlayer.getPartyMembership() == player.getPartyMembership())
+				.collect(Collectors.toList());
+		if (preferredPlayers.isEmpty()) {
+			preferredPlayers = availablePlayers;
+		}
+		PlayerData player = getRandomItemFromList(preferredPlayers);
+		String[] args = {Integer.toString(allPlayers.indexOf(player))};
+		return Optional.of(new GameplayAction(Action.CHOOSE_NEXT_PRESIDENTIAL_CANDIDATE, args));
 	}
 }

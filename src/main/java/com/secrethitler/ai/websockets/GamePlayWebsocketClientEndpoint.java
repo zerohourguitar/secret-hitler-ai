@@ -61,13 +61,16 @@ public class GamePlayWebsocketClientEndpoint extends WebsocketClientEndpoint {
 
 	private void sendDelayedMessage(String message) {
 		makingAMove = true;
-		try {
-			Thread.sleep(MOVE_DELAY);
-		} catch (InterruptedException e) {
-			LOGGER.log(Level.SEVERE, "Exception when delaying the gameplay response message: %s", e);
-			Thread.currentThread().interrupt();
-		}
-		sendMessage(message);
-		makingAMove = false;
+		Thread t = new Thread(() -> {
+			try {
+				Thread.sleep(MOVE_DELAY);
+			} catch (InterruptedException e) {
+				LOGGER.log(Level.SEVERE, "Exception when delaying the gameplay response message: %s", e);
+				Thread.currentThread().interrupt();
+			}
+			sendMessage(message);
+			makingAMove = false;
+		});
+		t.start();
 	}
 }
