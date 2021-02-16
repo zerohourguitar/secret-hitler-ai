@@ -1,37 +1,39 @@
 package com.secrethitler.ai.websockets;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.websocket.ClientEndpoint;
 import javax.websocket.OnMessage;
 import javax.websocket.OnOpen;
 import javax.websocket.Session;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.secrethitler.ai.SecretHitlerAi;
 import com.secrethitler.ai.dtos.GameRequest;
 
 @ClientEndpoint
-public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {
+public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {	
+	private static final Logger LOGGER = Logger.getLogger(GameSetupWebsocketClientEndpoint.class.getName());
+	
 	private String gameId;
 	private String accessToken;
 	private int gameplayLevel;
+	private String username;
 	
-	public GameSetupWebsocketClientEndpoint(String gameId, String accessToken, int gameplayLevel) {
+	public GameSetupWebsocketClientEndpoint(String gameId, String accessToken, int gameplayLevel, String username) throws URISyntaxException {
 		this.gameId = gameId;
 		this.accessToken = accessToken;
 		this.gameplayLevel = gameplayLevel;
+		this.username = username;
 		
 		final String gameSetupUrlString = "wss://" + SecretHitlerAi.getBaseUrlString() + SecretHitlerAi.getProp().getProperty("secrethitler.gamesetup.url") +
 				"?gameId=" + gameId + "&auth=" + accessToken;
-		try {
-			setupWebsocketClientEndpoint(new URI(gameSetupUrlString));
-		} catch (URISyntaxException e) {
-			e.printStackTrace();
-		}
+		setupWebsocketClientEndpoint(new URI(gameSetupUrlString));
 	}
 
 	@OnOpen
@@ -39,23 +41,22 @@ public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {
     public void onOpen(Session userSession) {
         this.userSession = userSession;
         this.sendMessage("JOIN");
+        LOGGER.info(() -> String.format("%s joined the game session", username));
     }
 	
 	@OnMessage
 	@Override
     public void onMessage(String message) {
-		System.out.println("Received game setup message: " + message);
+		LOGGER.fine(() -> String.format("Received game setup message: %s", message));
 		try {
 			GameRequest gameRequest = new ObjectMapper().readValue(message, GameRequest.class);
 			if (gameRequest.isStarted()) {
-				System.out.println("Starting the game!");
-				new GamePlayWebsocketClientEndpoint(gameId, accessToken, gameplayLevel);
+				LOGGER.info(() -> String.format("%s is starting the game!", username));
+				new GamePlayWebsocketClientEndpoint(gameId, accessToken, gameplayLevel, username);
 				userSession.close();
 			}
-		} catch (JsonProcessingException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
+		} catch (IOException | InstantiationException | IllegalAccessException | URISyntaxException | InvocationTargetException | NoSuchMethodException e) {
+			LOGGER.log(Level.SEVERE, "Exception on a game setup message", e);
 		}
     }
 }

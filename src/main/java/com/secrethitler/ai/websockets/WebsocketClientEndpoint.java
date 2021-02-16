@@ -18,7 +18,7 @@ public abstract class WebsocketClientEndpoint {
 	        WebSocketContainer container = ContainerProvider.getWebSocketContainer();
 	        container.connectToServer(this, endpointURI);
 	    } catch (Exception e) {
-	        throw new RuntimeException(e);
+	        throw new IllegalStateException(e);
 	    }
 	}
 	
@@ -40,7 +40,6 @@ public abstract class WebsocketClientEndpoint {
 	 */
 	@OnClose
 	public void onClose(Session userSession, CloseReason reason) {
-	    System.out.println("closing websocket");
 	    this.userSession = null;
 	}
 	
@@ -58,7 +57,6 @@ public abstract class WebsocketClientEndpoint {
 	 * @param message
 	 */
 	public void sendMessage(String message) {
-		System.out.println("Sending message: " + message);
 	    this.userSession.getAsyncRemote().sendText(message);
 	}
 	

@@ -8,7 +8,9 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Properties;
+import java.util.logging.Logger;
 import java.util.stream.IntStream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,15 +20,16 @@ import com.secrethitler.ai.dtos.LoginResponse;
 import com.secrethitler.ai.websockets.GameSetupWebsocketClientEndpoint;
 
 public class SecretHitlerAi {
+	private static final Logger LOGGER = Logger.getLogger(SecretHitlerAi.class.getName());
 	private static final String PROPERTIES_FILE_NAME = "application.properties";
 	
 	private static Properties prop;
 	private static String baseUrlString;
 	
-	public static void main(String[] args) throws IOException, URISyntaxException, InterruptedException {
+	public static void main(String[] args) throws IOException, InterruptedException {
 		final String gameId = args[0];
 		
-		System.out.println("Starting Secret Hitler AI for " + (args.length - 1) + " users with gameId " + gameId);
+		LOGGER.info(() -> String.format("Starting Secret Hitler AI for %d users with gameId %s.", args.length - 1, gameId));
 		
 		prop = new Properties();
 		ClassLoader loader = Thread.currentThread().getContextClassLoader();           
@@ -36,14 +39,15 @@ public class SecretHitlerAi {
 		
 		IntStream.range(1, args.length).forEach(idx -> {
 			try {
-				String accessToken = getAuthenticatedAccessToken("Robot " + idx, "password");
-				new GameSetupWebsocketClientEndpoint(gameId, accessToken, Integer.valueOf(args[idx]));
-			} catch (IOException e) {
-				e.printStackTrace();
+				String username = "Robot " + idx;
+				String accessToken = getAuthenticatedAccessToken(username, "password");
+				LOGGER.info(String.format("Logged in user %s", username));
+				new GameSetupWebsocketClientEndpoint(gameId, accessToken, Integer.valueOf(args[idx]), username);
+			} catch (IOException | NumberFormatException | URISyntaxException e) {
+				throw new IllegalStateException(e);
 			}
 		});
 		
-        
 		Thread.currentThread().join();
 	}
 
@@ -58,19 +62,19 @@ public class SecretHitlerAi {
 		con.setDoOutput(true);
 		ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
 		String json = ow.writeValueAsString(loginRequest);
-		System.out.println("Logging on with payload: " + json);
+		LOGGER.fine(() -> String.format("Logging on with payload: %s", json));
 		try(OutputStream os = con.getOutputStream()) {
-		    byte[] input = json.getBytes("utf-8");
+		    byte[] input = json.getBytes(StandardCharsets.UTF_8);
 		    os.write(input, 0, input.length);			
 		}
 		try(BufferedReader br = new BufferedReader(
-				new InputStreamReader(con.getInputStream(), "utf-8"))) {
+				new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8))) {
 			StringBuilder response = new StringBuilder();
 			String responseLine = null;
 			while ((responseLine = br.readLine()) != null) {
 				response.append(responseLine.trim());
 			}
-			System.out.println("Received login response: " + response.toString());
+			LOGGER.fine(() -> String.format("Received login response: %s", response.toString()));
 			LoginResponse loginResponse = new ObjectMapper().readValue(response.toString(), LoginResponse.class);
 			return loginResponse.getAccessToken();
 		}

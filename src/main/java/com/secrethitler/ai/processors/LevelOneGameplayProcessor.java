@@ -5,6 +5,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -25,6 +27,7 @@ import com.secrethitler.ai.enums.SecretRole;
 import com.secrethitler.ai.enums.Vote;
 
 public class LevelOneGameplayProcessor implements GameplayProcessor {
+	private static final Logger LOGGER = Logger.getLogger(LevelOneGameplayProcessor.class.getName());
 	private static final Random RANDOM_GENERATOR = new Random();
 	protected static final ObjectWriter OBJECT_WRITER = new ObjectMapper().writer().withDefaultPrettyPrinter();
 	protected static final Map<PartyMembership, Policy> PREFERRED_POLICY_TO_DISCARD_MAP = ImmutableMap.<PartyMembership, Policy>builder()
@@ -36,12 +39,14 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		int index = RANDOM_GENERATOR.nextInt(list.size());
 		return list.get(index);
 	}
-
+	
 	private Map<GamePhase, Function<GameData, Optional<GameplayAction>>> phaseToFunctionMap;
+	private String username;
 	private boolean hasVoted = false;
 	private boolean hasVetoed = false;
 	
-	public LevelOneGameplayProcessor() {	
+	public LevelOneGameplayProcessor(final String username) {
+		this.username = username;
 		phaseToFunctionMap = ImmutableMap.<GamePhase, Function<GameData, Optional<GameplayAction>>>builder()
 				.put(GamePhase.PICKING_RUNNING_MATE, this::pickRunningMate)
 				.put(GamePhase.ELECTION, this::vote)
@@ -61,7 +66,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 			try {
 				return OBJECT_WRITER.writeValueAsString(action);
 			} catch (JsonProcessingException e) {
-				e.printStackTrace();
+				LOGGER.log(Level.SEVERE, "Error parsing gameplay response message", e);
 			}
 			return null;
 		});
@@ -73,15 +78,16 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		if (!gameData.getMyPlayer().isPresident()) {
 			return Optional.empty();
 		}
-		int runningMateIndex = chooseRunningMateIndex(gameData);
+		PlayerData runningMate = chooseRunningMate(gameData);
+		LOGGER.info(() -> String.format("%s is picking %s as running mate.", username, runningMate.getUsername()));
+		int runningMateIndex = gameData.getPlayers().indexOf(runningMate);
 		String[] args = {String.valueOf(runningMateIndex)};
 		return Optional.of(new GameplayAction(Action.CHOOSE_RUNNING_MATE, args));		
 	}
 
-	protected int chooseRunningMateIndex(GameData gameData) {
-		List<PlayerData> allPlayers = gameData.getPlayers();
+	protected PlayerData chooseRunningMate(GameData gameData) {
 		PlayerData myPlayer = gameData.getMyPlayer();
-		List<PlayerData> eligiblePlayers = allPlayers.stream()
+		List<PlayerData> eligiblePlayers = gameData.getPlayers().stream()
 				.filter(player -> !myPlayer.equals(player))
 				.filter(player -> !player.isPreviousGovernmentMember())
 				.filter(PlayerData::isAlive)
@@ -92,7 +98,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 					.filter(player -> SecretRole.HITLER == player.getSecretRole())
 					.findAny();
 			if (hitler.isPresent()) {
-				return allPlayers.indexOf(hitler.get());
+				return hitler.get();
 			}
 		}
 		
@@ -103,8 +109,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		if (preferredPlayers.isEmpty()) {
 			preferredPlayers = eligiblePlayers;
 		}
-		PlayerData player = getRandomItemFromList(preferredPlayers);
-		return allPlayers.indexOf(player);
+		return getRandomItemFromList(preferredPlayers);
 	}
 	
 	protected Optional<GameplayAction> vote(GameData gameData) {
@@ -118,6 +123,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		Stream<PlayerData> governmentStream = gameData.getPlayers().stream()
 				.filter(player -> player.isPresident() || player.isChancellor());
 		Vote vote = isVoteJa(governmentStream, myPlayer.getPartyMembership()) ? Vote.JA : Vote.NEIN;
+		LOGGER.info(() -> String.format("%s is voting %s", username, vote.name()));
 		String[] args = {vote.name()};
 		hasVoted = true;
 		return Optional.of(new GameplayAction(Action.VOTE, args));
@@ -134,8 +140,11 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 			return Optional.empty();
 		}
 		Policy preferredPolicyToDiscard = PREFERRED_POLICY_TO_DISCARD_MAP.get(gameData.getMyPlayer().getPartyMembership());
-		int index = gameData.getPoliciesToView().indexOf(preferredPolicyToDiscard);
-		String args[] = {String.valueOf(index == -1 ? 0 : index)};
+		List<Policy> policies = gameData.getPoliciesToView();
+		int preferredIndex = policies.indexOf(preferredPolicyToDiscard);
+		int index = preferredIndex == -1 ? 0 : preferredIndex;
+		LOGGER.info(() -> String.format("%s is discarding %s policy", username, policies.get(index).name()));
+		String args[] = {String.valueOf(index)};
 		return Optional.of(new GameplayAction(Action.PRESIDENT_CHOICE, args));
 	}
 	
@@ -147,10 +156,14 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		if (!hasVetoed && gameData.isVetoUnlocked() && gameData.getPoliciesToView().stream().allMatch(policy -> preferredPolicyToDiscard == policy)) {
 			hasVetoed = true;
 			String[] args = {};
+			LOGGER.info(() -> String.format("%s is vetoing the policies", username));
 			return Optional.of(new GameplayAction(Action.CHANCELLOR_VETO, args));
 		}
-		int index = gameData.getPoliciesToView().indexOf(preferredPolicyToDiscard);
-		String args[] = {String.valueOf(index == -1 ? 0 : index)};
+		List<Policy> policies = gameData.getPoliciesToView();
+		int preferredIndex = policies.indexOf(preferredPolicyToDiscard);
+		int index = preferredIndex == -1 ? 0 : preferredIndex;
+		LOGGER.info(() -> String.format("%s is discarding %s policy", username, policies.get(index).name()));
+		String args[] = {String.valueOf(index)};
 		return Optional.of(new GameplayAction(Action.CHANCELLOR_CHOICE, args));
 	}
 	
@@ -159,6 +172,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 			return Optional.empty();
 		}
 		String[] args = {};
+		LOGGER.info(() -> String.format("%s is examining the top three policies", username));
 		return Optional.of(new GameplayAction(Action.FINISH_EXAMINATION, args));
 	}
 	
@@ -180,6 +194,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		}
 		PlayerData player = getRandomItemFromList(preferredPlayers);
 		String[] args = {String.valueOf(player.getUsername())};
+		LOGGER.info(() -> String.format("%s is killing %s", username, player.getUsername()));
 		return Optional.of(new GameplayAction(Action.KILL_PLAYER, args));
 	}
 	
@@ -190,6 +205,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		Policy preferredPolicyToDiscard = PREFERRED_POLICY_TO_DISCARD_MAP.get(gameData.getMyPlayer().getPartyMembership());
 		boolean concur = gameData.getPoliciesToView().stream().allMatch(policy -> preferredPolicyToDiscard == policy);
 		String[] args = {Boolean.toString(concur)};
+		LOGGER.info(() -> String.format("%s is agreeing to the veto", username));
 		return Optional.of(new GameplayAction(Action.PRESIDENT_VETO, args));
 	}
 }
