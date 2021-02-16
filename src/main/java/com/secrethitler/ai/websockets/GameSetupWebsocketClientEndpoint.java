@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Scanner;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -24,12 +25,14 @@ public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {
 	private String accessToken;
 	private int gameplayLevel;
 	private String username;
+	private boolean host;
 	
-	public GameSetupWebsocketClientEndpoint(String gameId, String accessToken, int gameplayLevel, String username) throws URISyntaxException {
+	public GameSetupWebsocketClientEndpoint(String gameId, String accessToken, int gameplayLevel, String username, boolean host) throws URISyntaxException {
 		this.gameId = gameId;
 		this.accessToken = accessToken;
 		this.gameplayLevel = gameplayLevel;
 		this.username = username;
+		this.host = host;
 		
 		final String gameSetupUrlString = "wss://" + SecretHitlerAi.getBaseUrlString() + SecretHitlerAi.getProp().getProperty("secrethitler.gamesetup.url") +
 				"?gameId=" + gameId + "&auth=" + accessToken;
@@ -40,8 +43,18 @@ public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {
 	@Override
     public void onOpen(Session userSession) {
         this.userSession = userSession;
-        this.sendMessage("JOIN");
-        LOGGER.info(() -> String.format("%s joined the game session", username));
+        if (host) {
+        	Thread t = new Thread(() -> {
+	        	LOGGER.info("Press enter when you are ready to start the game");
+	        	SecretHitlerAi.getScanner().nextLine();
+	            sendMessage("START");
+	            LOGGER.info("Game has been initiated by the host");
+        	});
+        	t.start();
+        } else {
+	        sendMessage("JOIN");
+	        LOGGER.info(() -> String.format("%s joined the game session", username));
+        }
     }
 	
 	@OnMessage

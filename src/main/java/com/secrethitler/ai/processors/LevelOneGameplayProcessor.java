@@ -29,7 +29,6 @@ import com.secrethitler.ai.enums.Vote;
 public class LevelOneGameplayProcessor implements GameplayProcessor {
 	private static final Logger LOGGER = Logger.getLogger(LevelOneGameplayProcessor.class.getName());
 	private static final Random RANDOM_GENERATOR = new Random();
-	protected static final ObjectWriter OBJECT_WRITER = new ObjectMapper().writer().withDefaultPrettyPrinter();
 	protected static final Map<PartyMembership, Policy> PREFERRED_POLICY_TO_DISCARD_MAP = ImmutableMap.<PartyMembership, Policy>builder()
 			.put(PartyMembership.LIBERAL, Policy.FASCIST)
 			.put(PartyMembership.FASCIST, Policy.LIBERAL)
@@ -42,7 +41,6 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 	
 	private Map<GamePhase, Function<GameData, Optional<GameplayAction>>> phaseToFunctionMap;
 	private String username;
-	private boolean hasVoted = false;
 	private boolean hasVetoed = false;
 	
 	public LevelOneGameplayProcessor(final String username) {
@@ -61,21 +59,13 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 	}
 
 	@Override
-	public Optional<String> getMessageToSend(ParticipantGameNotification notification) {
+	public Optional<GameplayAction> getActionToTake(ParticipantGameNotification notification) {
 		GameData gameData = notification.getGameData();
 		Function<GameData, Optional<GameplayAction>> function = phaseToFunctionMap.getOrDefault(gameData.getPhase(), data -> Optional.empty());
-		return function.apply(gameData).map(action -> {
-			try {
-				return OBJECT_WRITER.writeValueAsString(action);
-			} catch (JsonProcessingException e) {
-				LOGGER.log(Level.SEVERE, "Error parsing gameplay response message", e);
-			}
-			return null;
-		});
+		return function.apply(gameData);
 	}
 
 	protected Optional<GameplayAction> pickRunningMate(GameData gameData) {
-		hasVoted = false;
 		hasVetoed = false;
 		if (!gameData.getMyPlayer().isPresident()) {
 			return Optional.empty();
@@ -115,9 +105,6 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 	}
 	
 	protected Optional<GameplayAction> vote(GameData gameData) {
-		if (hasVoted) {
-			return Optional.empty();
-		}
 		PlayerData myPlayer = gameData.getMyPlayer();
 		if (myPlayer.isVoteReady() || !myPlayer.isAlive()) {
 			return Optional.empty();
@@ -127,7 +114,6 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		Vote vote = isVoteJa(governmentStream, myPlayer.getPartyMembership()) ? Vote.JA : Vote.NEIN;
 		LOGGER.info(() -> String.format("%s is voting %s", username, vote.name()));
 		String[] args = {vote.name()};
-		hasVoted = true;
 		return Optional.of(new GameplayAction(Action.VOTE, args));
 	}
 	
