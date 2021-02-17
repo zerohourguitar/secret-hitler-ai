@@ -12,6 +12,7 @@ import javax.websocket.OnMessage;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import com.secrethitler.ai.SecretHitlerAi;
 import com.secrethitler.ai.dtos.GameData;
 import com.secrethitler.ai.dtos.GameplayAction;
@@ -26,6 +27,7 @@ public class GamePlayWebsocketClientEndpoint extends WebsocketClientEndpoint {
 	private static final Logger LOGGER = Logger.getLogger(GamePlayWebsocketClientEndpoint.class.getName());
 	private static final int MOVE_DELAY = Integer.parseInt(SecretHitlerAi.getProp().getProperty("secrethitler.ai.movedelay"));
 	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+	private static final ObjectWriter OBJECT_WRITER = OBJECT_MAPPER.writer().withDefaultPrettyPrinter();
 	
 	private final String accessToken;
 	private final int level;
@@ -93,7 +95,7 @@ public class GamePlayWebsocketClientEndpoint extends WebsocketClientEndpoint {
 	
 	protected String gameplayActionToString(GameplayAction gameplayAction) {
 		try {
-			return OBJECT_MAPPER.writer().withDefaultPrettyPrinter().writeValueAsString(gameplayAction);
+			return OBJECT_WRITER.writeValueAsString(gameplayAction);
 		} catch (JsonProcessingException e) {
 			LOGGER.log(Level.SEVERE, "Error parsing gameplay response message", e);
 		}
