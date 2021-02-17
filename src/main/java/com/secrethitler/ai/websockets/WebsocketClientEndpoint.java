@@ -1,6 +1,7 @@
 package com.secrethitler.ai.websockets;
 
 import java.net.URI;
+import java.util.logging.Logger;
 
 import javax.websocket.CloseReason;
 import javax.websocket.ContainerProvider;
@@ -11,9 +12,10 @@ import javax.websocket.Session;
 import javax.websocket.WebSocketContainer;
 
 public abstract class WebsocketClientEndpoint {
+	private static final Logger LOGGER = Logger.getLogger(WebsocketClientEndpoint.class.getName());
 	protected Session userSession = null;
 
-	protected void setupWebsocketClientEndpoint(URI endpointURI) {
+	protected void setupWebsocketClientEndpoint(final URI endpointURI) {
 	    try {
 	        WebSocketContainer container = ContainerProvider.getWebSocketContainer();
 	        container.connectToServer(this, endpointURI);
@@ -56,17 +58,8 @@ public abstract class WebsocketClientEndpoint {
 	 *
 	 * @param message
 	 */
-	public void sendMessage(String message) {
+	public void sendMessage(final String message) {
+		LOGGER.fine(() -> String.format("Sending message: %s", message)); 
 	    this.userSession.getAsyncRemote().sendText(message);
-	}
-	
-	/**
-	 * Message handler.
-	 *
-	 * @author Jiji_Sasidharan
-	 */
-	public static interface MessageHandler {
-	
-	    public void handleMessage(String message);
 	}
 }

@@ -1,18 +1,16 @@
 package com.secrethitler.ai.processors;
 
+import static com.google.common.base.Predicates.not;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.function.Function;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.secrethitler.ai.dtos.GameData;
@@ -39,8 +37,8 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		return list.get(index);
 	}
 	
-	private Map<GamePhase, Function<GameData, Optional<GameplayAction>>> phaseToFunctionMap;
-	private String username;
+	private final Map<GamePhase, Function<GameData, Optional<GameplayAction>>> phaseToFunctionMap;
+	private final String username;
 	private boolean hasVetoed = false;
 	
 	public LevelOneGameplayProcessor(final String username) {
@@ -59,29 +57,28 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 	}
 
 	@Override
-	public Optional<GameplayAction> getActionToTake(ParticipantGameNotification notification) {
-		GameData gameData = notification.getGameData();
-		Function<GameData, Optional<GameplayAction>> function = phaseToFunctionMap.getOrDefault(gameData.getPhase(), data -> Optional.empty());
-		return function.apply(gameData);
+	public Optional<GameplayAction> getActionToTake(final ParticipantGameNotification notification) {
+		final GameData gameData = notification.getGameData();
+		return phaseToFunctionMap.getOrDefault(gameData.getPhase(), data -> Optional.empty()).apply(gameData);
 	}
 
-	protected Optional<GameplayAction> pickRunningMate(GameData gameData) {
+	protected Optional<GameplayAction> pickRunningMate(final GameData gameData) {
 		hasVetoed = false;
 		if (!gameData.getMyPlayer().isPresident()) {
 			return Optional.empty();
 		}
 		PlayerData runningMate = chooseRunningMate(gameData);
 		LOGGER.info(() -> String.format("%s is picking %s as running mate.", username, runningMate.getUsername()));
-		int runningMateIndex = gameData.getPlayers().indexOf(runningMate);
+		final int runningMateIndex = gameData.getPlayers().indexOf(runningMate);
 		String[] args = {String.valueOf(runningMateIndex)};
 		return Optional.of(new GameplayAction(Action.CHOOSE_RUNNING_MATE, args));		
 	}
 
-	protected PlayerData chooseRunningMate(GameData gameData) {
-		PlayerData myPlayer = gameData.getMyPlayer();
+	protected PlayerData chooseRunningMate(final GameData gameData) {
+		final PlayerData myPlayer = gameData.getMyPlayer();
 		List<PlayerData> eligiblePlayers = gameData.getPlayers().stream()
-				.filter(player -> !myPlayer.equals(player))
-				.filter(player -> !player.isPreviousGovernmentMember())
+				.filter(not(myPlayer::equals))
+				.filter(not(PlayerData::isPreviousGovernmentMember))
 				.filter(PlayerData::isAlive)
 				.collect(Collectors.toList());
 		
@@ -104,8 +101,8 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		return getRandomItemFromList(preferredPlayers);
 	}
 	
-	protected Optional<GameplayAction> vote(GameData gameData) {
-		PlayerData myPlayer = gameData.getMyPlayer();
+	protected Optional<GameplayAction> vote(final GameData gameData) {
+		final PlayerData myPlayer = gameData.getMyPlayer();
 		if (myPlayer.isVoteReady() || !myPlayer.isAlive()) {
 			return Optional.empty();
 		}
@@ -123,7 +120,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 					governmentStream.allMatch(player -> ImmutableSet.of(PartyMembership.LIBERAL, PartyMembership.UNKNOWN).contains(player.getPartyMembership()));
 	}
 	
-	protected Optional<GameplayAction> makePresidentChoice(GameData gameData) {
+	protected Optional<GameplayAction> makePresidentChoice(final GameData gameData) {
 		if (!gameData.getMyPlayer().isPresident()) {
 			return Optional.empty();
 		}
@@ -136,7 +133,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		return Optional.of(new GameplayAction(Action.PRESIDENT_CHOICE, args));
 	}
 	
-	protected Optional<GameplayAction> makeChancellorChoice(GameData gameData) {
+	protected Optional<GameplayAction> makeChancellorChoice(final GameData gameData) {
 		if (!gameData.getMyPlayer().isChancellor()) {
 			return Optional.empty();
 		}
@@ -155,7 +152,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		return Optional.of(new GameplayAction(Action.CHANCELLOR_CHOICE, args));
 	}
 	
-	protected Optional<GameplayAction> examine(GameData gameData) {
+	protected Optional<GameplayAction> examine(final GameData gameData) {
 		if (!gameData.getMyPlayer().isPresident()) {
 			return Optional.empty();
 		}
@@ -164,11 +161,11 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		return Optional.of(new GameplayAction(Action.FINISH_EXAMINATION, args));
 	}
 	
-	protected Optional<GameplayAction> kill(GameData gameData) {
+	protected Optional<GameplayAction> kill(final GameData gameData) {
 		if (!gameData.getMyPlayer().isPresident()) {
 			return Optional.empty();
 		}
-		PlayerData myPlayer = gameData.getMyPlayer();
+		final PlayerData myPlayer = gameData.getMyPlayer();
 		List<PlayerData> allPlayers = gameData.getPlayers();
 		List<PlayerData> eligiblePlayers = allPlayers.stream()
 				.filter(player -> !myPlayer.equals(player))
@@ -180,13 +177,13 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		if (preferredPlayers.isEmpty()) {
 			preferredPlayers = eligiblePlayers;
 		}
-		PlayerData player = getRandomItemFromList(preferredPlayers);
-		String[] args = {String.valueOf(player.getUsername())};
-		LOGGER.info(() -> String.format("%s is killing %s", username, player.getUsername()));
+		PlayerData playerToKill = getRandomItemFromList(preferredPlayers);
+		String[] args = {String.valueOf(playerToKill.getUsername())};
+		LOGGER.info(() -> String.format("%s is killing %s", username, playerToKill.getUsername()));
 		return Optional.of(new GameplayAction(Action.KILL_PLAYER, args));
 	}
 	
-	protected Optional<GameplayAction> presidentVeto(GameData gameData) {
+	protected Optional<GameplayAction> presidentVeto(final GameData gameData) {
 		if (!gameData.getMyPlayer().isPresident()) {
 			return Optional.empty();
 		}
@@ -197,7 +194,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		return Optional.of(new GameplayAction(Action.PRESIDENT_VETO, args));
 	}
 	
-	protected Optional<GameplayAction> investigate(GameData gameData) {
+	protected Optional<GameplayAction> investigate(final GameData gameData) {
 		if (!gameData.getMyPlayer().isPresident()) {
 			return Optional.empty();
 		}
@@ -211,16 +208,16 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		if (preferredPlayers.isEmpty()) {
 			preferredPlayers = availablePlayers;
 		}
-		PlayerData player = getRandomItemFromList(preferredPlayers);
-		String[] args = {player.getUsername()};
+		PlayerData playerToInvestigate = getRandomItemFromList(preferredPlayers);
+		String[] args = {playerToInvestigate.getUsername()};
 		return Optional.of(new GameplayAction(Action.INVESTIGATE_PLAYER, args));
 	}
 	
-	protected Optional<GameplayAction> chooseNextPresidentialCandidate(GameData gameData) {
+	protected Optional<GameplayAction> chooseNextPresidentialCandidate(final GameData gameData) {
 		if (!gameData.getMyPlayer().isPresident()) {
 			return Optional.empty();
 		}
-		PlayerData myPlayer = gameData.getMyPlayer();
+		final PlayerData myPlayer = gameData.getMyPlayer();
 		List<PlayerData> allPlayers = gameData.getPlayers();
 		List<PlayerData> availablePlayers = allPlayers.stream()
 				.filter(player -> !myPlayer.equals(player))
@@ -232,8 +229,8 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 		if (preferredPlayers.isEmpty()) {
 			preferredPlayers = availablePlayers;
 		}
-		PlayerData player = getRandomItemFromList(preferredPlayers);
-		String[] args = {Integer.toString(allPlayers.indexOf(player))};
+		PlayerData nextCandidate = getRandomItemFromList(preferredPlayers);
+		String[] args = {Integer.toString(allPlayers.indexOf(nextCandidate))};
 		return Optional.of(new GameplayAction(Action.CHOOSE_NEXT_PRESIDENTIAL_CANDIDATE, args));
 	}
 }

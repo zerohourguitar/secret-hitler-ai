@@ -9,6 +9,7 @@ import java.net.HttpURLConnection;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Scanner;
 import java.util.logging.Logger;
@@ -21,47 +22,42 @@ import com.secrethitler.ai.websockets.GameSetupWebsocketClientEndpoint;
 
 public class SecretHitlerAi {
 	private static final Logger LOGGER = Logger.getLogger(SecretHitlerAi.class.getName());
+	private static final Scanner SCANNER = new Scanner(System.in);
+	private static final Properties PROP = new Properties();
 	private static final String PROPERTIES_FILE_NAME = "application.properties";
 	private static final String NEW_GAME_COMMAND = "newGame";
-	private static final Scanner SCANNER = new Scanner(System.in);
 	
-	private static Properties prop;
 	private static String baseUrlString;
 	
-	public static void main(String[] args) throws IOException, InterruptedException {
+	public static void main(String[] args) throws IOException, InterruptedException, URISyntaxException {
 		final String originalGameId = args[0];
-		String gameId = originalGameId;
-		boolean newGame = NEW_GAME_COMMAND.contentEquals(gameId);
-		
+		boolean newGame = NEW_GAME_COMMAND.contentEquals(originalGameId);
 		LOGGER.info(() -> getStartupLogMessage(newGame, originalGameId, args.length - 1));
+		String gameId = originalGameId;
 		
-		prop = new Properties();
 		ClassLoader loader = Thread.currentThread().getContextClassLoader();           
 		InputStream stream = loader.getResourceAsStream(PROPERTIES_FILE_NAME);
-		prop.load(stream);
-		baseUrlString = prop.getProperty("secrethitler.url");
+		PROP.load(stream);
+		baseUrlString = PROP.getProperty("secrethitler.url");
+		final String robotPassword = PROP.getProperty("secrethitler.login.robotpassword");
 		
 		for (int idx=1; idx < args.length; idx++) {
-			try {
-				String username = "Robot " + idx;
-				String accessToken = getAuthenticatedAccessToken(username, "password");
-				LOGGER.info(() -> String.format("Logged in user %s", username));
-				boolean host = idx == 1 && newGame;
-				if (host) {
-					String newGameId = createNewGame(accessToken);
-					LOGGER.info(() -> String.format("New game created with id: %s", newGameId));
-					gameId = newGameId;
-				}
-				new GameSetupWebsocketClientEndpoint(gameId, accessToken, Integer.valueOf(args[idx]), username, host);
-			} catch (IOException | NumberFormatException | URISyntaxException e) {
-				throw new IllegalStateException(e);
+			String username = String.format("Robot %d", idx);
+			String accessToken = getAuthenticatedAccessToken(username, robotPassword);
+			LOGGER.info(() -> String.format("Logged in user %s", username));
+			boolean host = idx == 1 && newGame;
+			if (host) {
+				final String newGameId = createNewGame(accessToken);
+				LOGGER.info(() -> String.format("New game created with id: %s", newGameId));
+				gameId = newGameId;
 			}
+			new GameSetupWebsocketClientEndpoint(gameId, accessToken, Integer.valueOf(args[idx]), username, host);
 		}
 		
 		Thread.currentThread().join();
 	}
 	
-	private static String getStartupLogMessage(boolean newGame, String gameId, int totalUsers) {
+	private static String getStartupLogMessage(final boolean newGame, final String gameId, final int totalUsers) {
 		if (newGame) {
 			return String.format("Starting Secret Hitler AI for %d users creating a new game", totalUsers);
 		} 
@@ -70,46 +66,35 @@ public class SecretHitlerAi {
 
 	private static String getAuthenticatedAccessToken(final String username, final String password) throws IOException {
 		LoginRequest loginRequest = new LoginRequest(username, password);
-		final String loginUrlString = prop.getProperty("secrethitler.login.url");
-		URL loginUrl = new URL("https://" + baseUrlString + loginUrlString);
-		HttpURLConnection con = (HttpURLConnection) loginUrl.openConnection();
-		con.setRequestMethod("POST");
-		con.setRequestProperty("Content-Type", "application/json; utf-8");
-		con.setRequestProperty("Accept", "application/json");
-		con.setDoOutput(true);
-		ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
+		ObjectMapper mapper = new ObjectMapper();
+		ObjectWriter ow = mapper.writer().withDefaultPrettyPrinter();
 		String json = ow.writeValueAsString(loginRequest);
 		LOGGER.fine(() -> String.format("Logging on with payload: %s", json));
-		try(OutputStream os = con.getOutputStream()) {
-		    byte[] input = json.getBytes(StandardCharsets.UTF_8);
-		    os.write(input, 0, input.length);			
-		}
-		try(BufferedReader br = new BufferedReader(
-				new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8))) {
-			StringBuilder response = new StringBuilder();
-			String responseLine = null;
-			while ((responseLine = br.readLine()) != null) {
-				response.append(responseLine.trim());
-			}
-			LOGGER.fine(() -> String.format("Received login response: %s", response.toString()));
-			LoginResponse loginResponse = new ObjectMapper().readValue(response.toString(), LoginResponse.class);
-			return loginResponse.getAccessToken();
-		}
+		final String loginUrlString = PROP.getProperty("secrethitler.login.url");
+		String response = post(json, loginUrlString, Optional.empty());
+		LOGGER.fine(() -> String.format("Received login response: %s", response));
+		LoginResponse loginResponse = mapper.readValue(response, LoginResponse.class);
+		return loginResponse.getAccessToken();
 	}
 	
 	private static String createNewGame(final String accessToken) throws IOException {
-		final String createGameUrlString = prop.getProperty("secrethitler.creategame.url");
-		URL createGameUrl = new URL("https://" + baseUrlString + createGameUrlString);
-		HttpURLConnection con = (HttpURLConnection) createGameUrl.openConnection();
+		final String createGameUrlString = PROP.getProperty("secrethitler.creategame.url");
+		return post("{}", createGameUrlString, Optional.of(accessToken));
+	}
+	
+	private static String post(final String payload, final String urlString, final Optional<String> authorization) throws IOException {
+		URL url = new URL(String.format("https://%s%s", baseUrlString, urlString));
+		HttpURLConnection con = (HttpURLConnection) url.openConnection();
 		con.setRequestMethod("POST");
 		con.setRequestProperty("Content-Type", "application/json; utf-8");
 		con.setRequestProperty("Accept", "application/json");
-		con.setRequestProperty("authorization", accessToken);
+		authorization.ifPresent(auth -> con.setRequestProperty("authorization", auth));
 		con.setDoOutput(true);
 		try(OutputStream os = con.getOutputStream()) {
-		    byte[] input = "{}".getBytes(StandardCharsets.UTF_8);
+		    byte[] input = payload.getBytes(StandardCharsets.UTF_8);
 		    os.write(input, 0, input.length);			
 		}
+		
 		try(BufferedReader br = new BufferedReader(
 				new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8))) {
 			StringBuilder response = new StringBuilder();
@@ -120,17 +105,17 @@ public class SecretHitlerAi {
 			return response.toString();
 		}
 	}
+	
+	public static Scanner getScanner() {
+		return SCANNER;
+	}
 
 	public static Properties getProp() {
-		return prop;
+		return PROP;
 	}
 
 	public static String getBaseUrlString() {
 		return baseUrlString;
-	}
-	
-	public static Scanner getScanner() {
-		return SCANNER;
 	}
 
 }

@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.Scanner;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -21,21 +20,22 @@ import com.secrethitler.ai.dtos.GameRequest;
 public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {	
 	private static final Logger LOGGER = Logger.getLogger(GameSetupWebsocketClientEndpoint.class.getName());
 	
-	private String gameId;
-	private String accessToken;
-	private int gameplayLevel;
-	private String username;
-	private boolean host;
+	private final String gameId;
+	private final String accessToken;
+	private final int gameplayLevel;
+	private final String username;
+	private final boolean host;
 	
-	public GameSetupWebsocketClientEndpoint(String gameId, String accessToken, int gameplayLevel, String username, boolean host) throws URISyntaxException {
+	public GameSetupWebsocketClientEndpoint(final String gameId, final String accessToken, final int gameplayLevel, final String username, final boolean host) throws URISyntaxException {
 		this.gameId = gameId;
 		this.accessToken = accessToken;
 		this.gameplayLevel = gameplayLevel;
 		this.username = username;
 		this.host = host;
 		
-		final String gameSetupUrlString = "wss://" + SecretHitlerAi.getBaseUrlString() + SecretHitlerAi.getProp().getProperty("secrethitler.gamesetup.url") +
-				"?gameId=" + gameId + "&auth=" + accessToken;
+		final String gameSetupUrlString = String.format("wss://%s%s?gameId=%s&auth=%s", 
+				SecretHitlerAi.getBaseUrlString(), SecretHitlerAi.getProp().getProperty("secrethitler.gamesetup.url"), 
+				gameId, accessToken);
 		setupWebsocketClientEndpoint(new URI(gameSetupUrlString));
 	}
 
@@ -53,8 +53,8 @@ public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {
         	t.start();
         } else {
 	        sendMessage("JOIN");
-	        LOGGER.info(() -> String.format("%s joined the game session", username));
         }
+        LOGGER.info(() -> String.format("%s joined the game session", username));
     }
 	
 	@OnMessage
