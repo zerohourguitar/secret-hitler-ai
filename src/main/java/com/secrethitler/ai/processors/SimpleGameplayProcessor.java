@@ -24,8 +24,8 @@ import com.secrethitler.ai.enums.Policy;
 import com.secrethitler.ai.enums.SecretRole;
 import com.secrethitler.ai.enums.Vote;
 
-public class LevelOneGameplayProcessor implements GameplayProcessor {
-	private static final Logger LOGGER = Logger.getLogger(LevelOneGameplayProcessor.class.getName());
+public class SimpleGameplayProcessor implements GameplayProcessor {
+	private static final Logger LOGGER = Logger.getLogger(SimpleGameplayProcessor.class.getName());
 	private static final Random RANDOM_GENERATOR = new Random();
 	protected static final Map<PartyMembership, Policy> PREFERRED_POLICY_TO_DISCARD_MAP = ImmutableMap.<PartyMembership, Policy>builder()
 			.put(PartyMembership.LIBERAL, Policy.FASCIST)
@@ -41,7 +41,7 @@ public class LevelOneGameplayProcessor implements GameplayProcessor {
 	private final String username;
 	private boolean hasVetoed = false;
 	
-	public LevelOneGameplayProcessor(final String username) {
+	public SimpleGameplayProcessor(final String username) {
 		this.username = username;
 		phaseToFunctionMap = ImmutableMap.<GamePhase, Function<GameData, Optional<GameplayAction>>>builder()
 				.put(GamePhase.PICKING_RUNNING_MATE, this::pickRunningMate)
