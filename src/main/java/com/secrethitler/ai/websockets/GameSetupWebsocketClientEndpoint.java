@@ -33,7 +33,7 @@ public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {
 		this.username = username;
 		this.host = host;
 		
-		final String gameSetupUrlString = String.format("wss://%s%s?gameId=%s&auth=%s", 
+		final String gameSetupUrlString = String.format("%s://%s%s?gameId=%s&auth=%s", SecretHitlerAi.isSecureUrl() ? "wss" : "ws",
 				SecretHitlerAi.getBaseUrlString(), SecretHitlerAi.getProp().getProperty("secrethitler.gamesetup.url"), 
 				gameId, accessToken);
 		setupWebsocketClientEndpoint(new URI(gameSetupUrlString));
