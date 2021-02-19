@@ -69,10 +69,10 @@ public class SecretHitlerAi {
 	}
 
 	private static String getAuthenticatedAccessToken(final String username, final String password) throws IOException {
-		String json = OBJECT_WRITER.writeValueAsString(new LoginRequest(username, password));
+		final String json = OBJECT_WRITER.writeValueAsString(new LoginRequest(username, password));
 		LOGGER.fine(() -> String.format("Logging on with payload: %s", json));
 		final String loginUrlString = PROP.getProperty("secrethitler.login.url");
-		String response = post(json, loginUrlString, Optional.empty());
+		final String response = post(json, loginUrlString, Optional.empty());
 		LOGGER.fine(() -> String.format("Received login response: %s", response));
 		return OBJECT_MAPPER.readValue(response, LoginResponse.class).getAccessToken();
 	}
@@ -83,8 +83,8 @@ public class SecretHitlerAi {
 	}
 	
 	private static String post(final String payload, final String urlString, final Optional<String> authorization) throws IOException {
-		URL url = new URL(String.format("%s://%s%s", secureUrl ? "https" : "http", baseUrlString, urlString));
-		HttpURLConnection con = (HttpURLConnection) url.openConnection();
+		final URL url = new URL(String.format("%s://%s%s", secureUrl ? "https" : "http", baseUrlString, urlString));
+		final HttpURLConnection con = (HttpURLConnection) url.openConnection();
 		con.setRequestMethod("POST");
 		con.setRequestProperty("Content-Type", "application/json; utf-8");
 		con.setRequestProperty("Accept", "application/json");

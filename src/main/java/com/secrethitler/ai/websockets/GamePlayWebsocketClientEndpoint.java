@@ -33,6 +33,7 @@ public class GamePlayWebsocketClientEndpoint extends WebsocketClientEndpoint {
 	private final int level;
 	private final GameplayProcessor processor;
 	private final String username;
+	
 	private GamePhase previousPhase = null;
 
 	public GamePlayWebsocketClientEndpoint(final String gameId, final String accessToken, final int level, final String username) throws InstantiationException, IllegalAccessException, URISyntaxException, InvocationTargetException, NoSuchMethodException {	

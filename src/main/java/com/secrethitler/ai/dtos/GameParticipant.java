@@ -6,6 +6,7 @@ public class GameParticipant {
 	private String username;
 	private ParticipantRole role;
 	private boolean connected;
+	
 	public String getUsername() {
 		return username;
 	}

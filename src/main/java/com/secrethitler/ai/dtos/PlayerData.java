@@ -19,6 +19,7 @@ public class PlayerData {
 	private boolean previousGovernmentMember;
 	private Vote vote;
 	private boolean voteReady;
+	
 	public String getUsername() {
 		return username;
 	}

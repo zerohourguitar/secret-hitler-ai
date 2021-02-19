@@ -1,5 +1,8 @@
 package com.secrethitler.ai.enums;
 
 public enum SecretRole {
-	LIBERAL, FASCIST, HITLER, UNKNOWN;
+	LIBERAL, 
+	FASCIST, 
+	HITLER, 
+	UNKNOWN,
 }
