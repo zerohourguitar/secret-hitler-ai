@@ -76,8 +76,9 @@ public class GamePlayWebsocketClientEndpoint extends WebsocketClientEndpoint {
 		            LOGGER.info("Game has been initiated by the host");
 	        	});
 	        	t.start();
+			} else {
+				processor.getActionToTake(gameNotification).ifPresent(this::sendDelayedMessage);
 			}
-			processor.getActionToTake(gameNotification).ifPresent(this::sendDelayedMessage);
 		} catch (IOException | InstantiationException | IllegalAccessException | URISyntaxException | InvocationTargetException | NoSuchMethodException e) {
 			LOGGER.log(Level.SEVERE, "Exception on a game setup message", e);
 		}
