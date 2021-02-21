@@ -108,13 +108,13 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		}
 		Stream<PlayerData> governmentStream = gameData.getPlayers().stream()
 				.filter(player -> player.isPresident() || player.isChancellor());
-		Vote vote = isVoteJa(governmentStream, myPlayer.getPartyMembership()) ? Vote.JA : Vote.NEIN;
+		Vote vote = isVoteJa(governmentStream, myPlayer.getPartyMembership(), myPlayer.getSecretRole(), gameData.getPlayers().size()) ? Vote.JA : Vote.NEIN;
 		LOGGER.info(() -> String.format("%s is voting %s", username, vote.name()));
 		String[] args = {vote.name()};
 		return Optional.of(new GameplayAction(Action.VOTE, args));
 	}
 	
-	protected boolean isVoteJa(Stream<PlayerData> governmentStream, PartyMembership myMembership) {
+	protected boolean isVoteJa(Stream<PlayerData> governmentStream, PartyMembership myMembership, SecretRole myRole, int numberOfPlayers) {
 		return PartyMembership.FASCIST == myMembership ? 
 				governmentStream.anyMatch(player -> ImmutableSet.of(PartyMembership.FASCIST, PartyMembership.UNKNOWN).contains(player.getPartyMembership())) :
 					governmentStream.allMatch(player -> ImmutableSet.of(PartyMembership.LIBERAL, PartyMembership.UNKNOWN).contains(player.getPartyMembership()));
