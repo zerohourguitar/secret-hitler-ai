@@ -2,6 +2,7 @@ package com.secrethitler.ai.dtos;
 
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
+import org.apache.commons.lang3.builder.ToStringBuilder;
 
 import com.secrethitler.ai.enums.PartyMembership;
 import com.secrethitler.ai.enums.SecretRole;
@@ -95,5 +96,10 @@ public class PlayerData {
 	@Override
 	public boolean equals(Object obj) {
 		return EqualsBuilder.reflectionEquals(this, obj);
+	}
+	
+	@Override
+	public String toString() {
+		return ToStringBuilder.reflectionToString(this);
 	}
 }

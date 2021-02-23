@@ -18,14 +18,15 @@ import com.secrethitler.ai.dtos.PlayerData;
 import com.secrethitler.ai.enums.Action;
 import com.secrethitler.ai.enums.PartyMembership;
 import com.secrethitler.ai.enums.SecretRole;
+import com.secrethitler.ai.utils.RandomUtil;
 
 public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 	private final Map<Action, Consumer<GameData>> actionToDeduceMap;
 	
 	private Map<String, PartyMembership> suspectedMemberships = new HashMap<>();
 
-	public BooleanDecisionGameplayProcessor(String username) {
-		super(username);
+	public BooleanDecisionGameplayProcessor(final String username, final RandomUtil randomUtil) {
+		super(username, randomUtil);
 		actionToDeduceMap = ImmutableMap.<Action, Consumer<GameData>>builder()
 				.put(Action.SHUSH, this::governmentChosenDeducer)
 				.put(Action.DENIED, this::governmentDeniedDeducer)
@@ -56,34 +57,46 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 	}
 	
 	@Override
+	protected List<PlayerData> getMostLikelyPartyMembers(final List<PlayerData> players, final PartyMembership membership) {
+		List<PlayerData> mostLikelyPlayers = players.stream()
+				.filter(player -> membership == getSuspectedMembership(player.getUsername()))
+				.collect(Collectors.toList());
+		if (mostLikelyPlayers.isEmpty()) {
+			return players;
+		}
+		return mostLikelyPlayers;
+	}
+	
+	@Override
 	protected boolean isVoteJa(Stream<PlayerData> governmentStream, PartyMembership myMembership, SecretRole myRole, int numberOfPlayers) {
 		if (SecretRole.LIBERAL == myRole || (SecretRole.HITLER == myRole && numberOfPlayers >= 7)) {
 			List<PlayerData> government = governmentStream.collect(Collectors.toList());
-			Set<PartyMembership> govtSuspectedMemberships = government.stream()
-					.map(player -> getSuspectedMembership(player.getUsername()))
+			Set<PartyMembership> knownMemberships = government.stream()
+					.map(PlayerData::getPartyMembership)
 					.filter(membership -> PartyMembership.UNKNOWN != membership)
 					.collect(Collectors.toSet());
 			PartyMembership suspectedMembership = PartyMembership.UNKNOWN;
-			if (govtSuspectedMemberships.size() == 1) {
-				suspectedMembership = govtSuspectedMemberships.stream().findAny().get();
-				final PartyMembership newSuspectedMembership = suspectedMembership;
-				government.forEach(player -> setSuspectedMembership(player, newSuspectedMembership));
-			} else if (govtSuspectedMemberships.size() == 2) {
-				Set<PartyMembership> knownMemberships = government.stream()
-						.map(player -> player.getPartyMembership())
+			if (knownMemberships.size() == 1) {
+				PartyMembership knownMembership = knownMemberships.stream().findAny().get();
+				suspectedMembership = knownMembership;
+				government.forEach(player -> setSuspectedMembership(player, knownMembership));
+			} else if (knownMemberships.size() == 2) {
+				suspectedMembership = PartyMembership.FASCIST;
+			} else {
+				Set<PartyMembership> govtSuspectedMemberships = government.stream()
+						.map(player -> getSuspectedMembership(player.getUsername()))
 						.filter(membership -> PartyMembership.UNKNOWN != membership)
 						.collect(Collectors.toSet());
-				if (knownMemberships.size() == 1) {
-					PartyMembership knownMembership = knownMemberships.stream().findAny().get();
-					suspectedMembership = knownMembership;
-					government.forEach(player -> setSuspectedMembership(player, knownMembership));
-				} else if (knownMemberships.size() == 2) {
-					suspectedMembership = PartyMembership.FASCIST;
-				} else {
+				if (govtSuspectedMemberships.size() == 1) {
+					suspectedMembership = govtSuspectedMemberships.stream().findAny().get();
+					final PartyMembership newSuspectedMembership = suspectedMembership;
+					government.forEach(player -> setSuspectedMembership(player, newSuspectedMembership));
+				} else if (govtSuspectedMemberships.size() == 2) {
 					government.forEach(player -> setSuspectedMembership(player, PartyMembership.UNKNOWN));
 				}
 			}
-			return Set.of(PartyMembership.UNKNOWN, myMembership).contains(suspectedMembership);
+			
+			return ImmutableSet.of(PartyMembership.UNKNOWN, myMembership).contains(suspectedMembership);
 		}
 		return governmentStream.anyMatch(player -> PartyMembership.FASCIST == player.getPartyMembership());
 	}

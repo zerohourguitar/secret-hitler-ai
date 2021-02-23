@@ -5,11 +5,12 @@ import static com.google.common.base.Predicates.not;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Random;
 import java.util.function.Function;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import org.apache.commons.collections4.CollectionUtils;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -23,26 +24,23 @@ import com.secrethitler.ai.enums.PartyMembership;
 import com.secrethitler.ai.enums.Policy;
 import com.secrethitler.ai.enums.SecretRole;
 import com.secrethitler.ai.enums.Vote;
+import com.secrethitler.ai.utils.RandomUtil;
 
 public class SimpleGameplayProcessor implements GameplayProcessor {
 	private static final Logger LOGGER = Logger.getLogger(SimpleGameplayProcessor.class.getName());
-	private static final Random RANDOM_GENERATOR = new Random();
 	protected static final Map<PartyMembership, Policy> PREFERRED_POLICY_TO_DISCARD_MAP = ImmutableMap.<PartyMembership, Policy>builder()
 			.put(PartyMembership.LIBERAL, Policy.FASCIST)
 			.put(PartyMembership.FASCIST, Policy.LIBERAL)
 			.build();
 	
-	private static <T> T getRandomItemFromList(List<T> list) {
-		int index = RANDOM_GENERATOR.nextInt(list.size());
-		return list.get(index);
-	}
-	
+	private final RandomUtil randomUtil;
 	private final Map<GamePhase, Function<GameData, Optional<GameplayAction>>> phaseToFunctionMap;
 	private final String username;
 	private boolean hasVetoed = false;
 	
-	public SimpleGameplayProcessor(final String username) {
+	public SimpleGameplayProcessor(final String username, final RandomUtil randomUtil) {
 		this.username = username;
+		this.randomUtil = randomUtil;
 		phaseToFunctionMap = ImmutableMap.<GamePhase, Function<GameData, Optional<GameplayAction>>>builder()
 				.put(GamePhase.PICKING_RUNNING_MATE, this::pickRunningMate)
 				.put(GamePhase.ELECTION, this::vote)
@@ -82,6 +80,11 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 				.filter(PlayerData::isAlive)
 				.collect(Collectors.toList());
 		
+		return chooseRunningMate(gameData, eligiblePlayers);
+	}
+	
+	protected PlayerData chooseRunningMate(final GameData gameData, List<PlayerData> eligiblePlayers) {
+		final PlayerData myPlayer = gameData.getMyPlayer();
 		if (SecretRole.FASCIST == myPlayer.getSecretRole()) {
 			Optional<PlayerData> hitler = eligiblePlayers.stream()
 					.filter(player -> SecretRole.HITLER == player.getSecretRole())
@@ -91,14 +94,29 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 			}
 		}
 		
-		List<PlayerData> preferredPlayers = eligiblePlayers.stream()
-				.filter(player -> myPlayer.getPartyMembership() == player.getPartyMembership())
+		List<PlayerData> preferredPlayers = getPreferredPlayers(myPlayer.getPartyMembership(), eligiblePlayers);
+		return randomUtil.getRandomItemFromList(preferredPlayers);
+	}
+	
+	protected List<PlayerData> getPreferredPlayers(PartyMembership myMembership, List<PlayerData> eligiblePlayers) {
+		List<PlayerData> playersOnMyTeam = eligiblePlayers.stream()
+				.filter(player -> myMembership == player.getPartyMembership())
 				.collect(Collectors.toList());
 		
-		if (preferredPlayers.isEmpty()) {
-			preferredPlayers = eligiblePlayers;
+		if (CollectionUtils.isNotEmpty(playersOnMyTeam)) {
+			return playersOnMyTeam;
 		}
-		return getRandomItemFromList(preferredPlayers);
+		List<PlayerData> unknownPlayers = eligiblePlayers.stream()
+				.filter(player -> PartyMembership.UNKNOWN == player.getPartyMembership())
+				.collect(Collectors.toList());
+		if (unknownPlayers.isEmpty()) {
+			return eligiblePlayers;
+		}
+		return getMostLikelyPartyMembers(unknownPlayers, myMembership);
+	}
+	
+	protected List<PlayerData> getMostLikelyPartyMembers(final List<PlayerData> players, final PartyMembership myMembership) {
+		return players;
 	}
 	
 	protected Optional<GameplayAction> vote(final GameData gameData) {
@@ -177,7 +195,7 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		if (preferredPlayers.isEmpty()) {
 			preferredPlayers = eligiblePlayers;
 		}
-		PlayerData playerToKill = getRandomItemFromList(preferredPlayers);
+		PlayerData playerToKill = randomUtil.getRandomItemFromList(preferredPlayers);
 		String[] args = {String.valueOf(playerToKill.getUsername())};
 		LOGGER.info(() -> String.format("%s is killing %s", username, playerToKill.getUsername()));
 		return Optional.of(new GameplayAction(Action.KILL_PLAYER, args));
@@ -208,7 +226,7 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		if (preferredPlayers.isEmpty()) {
 			preferredPlayers = availablePlayers;
 		}
-		PlayerData playerToInvestigate = getRandomItemFromList(preferredPlayers);
+		PlayerData playerToInvestigate = randomUtil.getRandomItemFromList(preferredPlayers);
 		String[] args = {playerToInvestigate.getUsername()};
 		return Optional.of(new GameplayAction(Action.INVESTIGATE_PLAYER, args));
 	}
@@ -229,7 +247,7 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		if (preferredPlayers.isEmpty()) {
 			preferredPlayers = availablePlayers;
 		}
-		PlayerData nextCandidate = getRandomItemFromList(preferredPlayers);
+		PlayerData nextCandidate = randomUtil.getRandomItemFromList(preferredPlayers);
 		String[] args = {Integer.toString(allPlayers.indexOf(nextCandidate))};
 		return Optional.of(new GameplayAction(Action.CHOOSE_NEXT_PRESIDENTIAL_CANDIDATE, args));
 	}
