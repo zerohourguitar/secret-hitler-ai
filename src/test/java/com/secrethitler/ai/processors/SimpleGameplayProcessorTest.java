@@ -160,16 +160,32 @@ public class SimpleGameplayProcessorTest {
 	
 	@Test
 	public void testChooseRunningMate_LiberalPresidentUnknowns() {
-		myPlayer.setPresident(true);
-		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
-		myPlayer.setSecretRole(SecretRole.LIBERAL);
 		gameData.setPlayers(Arrays.asList(previousGovernmentMember, deadPlayer, myPlayer, unknown, fascist, unknown2, fascist2));
-		String[] args = {"5"};
 		when(randomUtil.getRandomItemFromList(Arrays.asList(unknown, unknown2))).thenReturn(unknown2);
+		String[] args = {"5"};
 		
-		testChooseRunningMate(Optional.of(new GameplayAction(Action.CHOOSE_RUNNING_MATE, args)));
+		testChooseRunningMate_Unknowns(args, PartyMembership.LIBERAL, SecretRole.LIBERAL);
 		
 		verify(randomUtil).getRandomItemFromList(Arrays.asList(unknown, unknown2));
+	}
+	
+	@Test
+	public void testChooseRunningMate_HitlerPresidentUnknowns() {
+		gameData.setPlayers(Arrays.asList(previousGovernmentMember, deadPlayer, myPlayer, unknown, liberal, unknown2, liberal2));
+		when(randomUtil.getRandomItemFromList(Arrays.asList(unknown, unknown2))).thenReturn(unknown2);
+		String[] args = {"5"};
+		
+		testChooseRunningMate_Unknowns(args, PartyMembership.FASCIST, SecretRole.HITLER);
+		
+		verify(randomUtil).getRandomItemFromList(Arrays.asList(unknown, unknown2));
+	}
+	
+	protected void testChooseRunningMate_Unknowns(String[] args, PartyMembership membership, SecretRole role) {
+		myPlayer.setPresident(true);
+		myPlayer.setPartyMembership(membership);
+		myPlayer.setSecretRole(role);
+	
+		testChooseRunningMate(Optional.of(new GameplayAction(Action.CHOOSE_RUNNING_MATE, args)));
 	}
 	
 	private void testChooseRunningMate(Optional<GameplayAction> expectedResult) {
