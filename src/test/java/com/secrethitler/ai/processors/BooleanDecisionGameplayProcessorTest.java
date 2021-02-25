@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -17,6 +18,7 @@ import org.junit.Test;
 import com.secrethitler.ai.dtos.GameplayAction;
 import com.secrethitler.ai.dtos.PlayerData;
 import com.secrethitler.ai.enums.Action;
+import com.secrethitler.ai.enums.GamePhase;
 import com.secrethitler.ai.enums.PartyMembership;
 import com.secrethitler.ai.enums.SecretRole;
 import com.secrethitler.ai.enums.Vote;
@@ -32,11 +34,15 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 		processor = new BooleanDecisionGameplayProcessor("Robot 1", randomUtil);
 		boolProcessor = (BooleanDecisionGameplayProcessor) processor;
 		aj = new PlayerData();
+		aj.setAlive(true);
 		aj.setUsername("AJ");
 		aj.setPartyMembership(PartyMembership.UNKNOWN);
 		sean = new PlayerData();
+		sean.setAlive(true);
 		sean.setUsername("Sean");
 		sean.setPartyMembership(PartyMembership.UNKNOWN);
+		gameData.setPlayers(Collections.emptyList());
+		notification.setAction(new GameplayAction(Action.CONNECTED, null));
 	}
 	
 	@Test
@@ -198,5 +204,85 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 		String[] args = {vote.name()};
 		
 		testVote(Optional.of(new GameplayAction(Action.VOTE, args)), players);
+	}
+	
+	@Test
+	public void testGovernmentDenied_LiberalJa() {
+		testGovernmentDenied(PartyMembership.LIBERAL, SecretRole.LIBERAL, Vote.JA);
+		
+		assertEquals("AJ should be a suspected Liberal", PartyMembership.LIBERAL, boolProcessor.getSuspectedMembership("AJ"));
+		assertEquals("Sean should be a suspected Fascist", PartyMembership.FASCIST, boolProcessor.getSuspectedMembership("Sean"));
+	}
+	
+	@Test
+	public void testGovernmentDenied_LiberalNein() {
+		testGovernmentDenied(PartyMembership.LIBERAL, SecretRole.LIBERAL, Vote.NEIN);
+		
+		assertEquals("AJ should be a suspected Fascist", PartyMembership.FASCIST, boolProcessor.getSuspectedMembership("AJ"));
+		assertEquals("Sean should be a suspected Liberal", PartyMembership.LIBERAL, boolProcessor.getSuspectedMembership("Sean"));
+	}
+	
+	@Test
+	public void testGovernmentDenied_HitlerJa() {
+		testGovernmentDenied(PartyMembership.FASCIST, SecretRole.HITLER, Vote.JA);
+		
+		assertEquals("AJ should be a suspected Fascist", PartyMembership.FASCIST, boolProcessor.getSuspectedMembership("AJ"));
+		assertEquals("Sean should be a suspected Liberal", PartyMembership.LIBERAL, boolProcessor.getSuspectedMembership("Sean"));
+	}
+	
+	@Test
+	public void testGovernmentDenied_HitlerNein() {
+		testGovernmentDenied(PartyMembership.FASCIST, SecretRole.HITLER, Vote.NEIN);
+		
+		assertEquals("AJ should be a suspected Liberal", PartyMembership.LIBERAL, boolProcessor.getSuspectedMembership("AJ"));
+		assertEquals("Sean should be a suspected Fascist", PartyMembership.FASCIST, boolProcessor.getSuspectedMembership("Sean"));
+	}
+	
+	private void testGovernmentDenied(PartyMembership myMembership, SecretRole myRole, Vote myVote) {
+		String[] args = {};
+		notification.setAction(new GameplayAction(Action.DENIED, args));
+		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
+		myPlayer.setPartyMembership(myMembership);
+		myPlayer.setSecretRole(myRole);
+		myPlayer.setVote(myVote);
+		aj.setVote(Vote.JA);
+		sean.setVote(Vote.NEIN);
+		gameData.setPlayers(Arrays.asList(aj, sean, fascist, fascist2, liberal, liberal2, myPlayer));
+		
+		processor.getActionToTake(notification);
+	}
+	
+	@Test
+	public void testLiberalPolicyPlayed() {
+		String[] args = {};
+		notification.setAction(new GameplayAction(Action.LIBERAL_POLICY, args));
+		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
+		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
+		myPlayer.setSecretRole(SecretRole.LIBERAL);
+		aj.setVote(Vote.JA);
+		sean.setVote(Vote.NEIN);
+		gameData.setPlayers(Arrays.asList(aj, sean, deadPlayer, fascist, liberal));
+		
+		processor.getActionToTake(notification);
+		
+		assertEquals("AJ should be a suspected Liberal", PartyMembership.LIBERAL, boolProcessor.getSuspectedMembership("AJ"));
+		assertEquals("Sean should be a suspected Fascist", PartyMembership.FASCIST, boolProcessor.getSuspectedMembership("Sean"));
+	}
+	
+	@Test
+	public void testFascistPolicyPlayed() {
+		String[] args = {};
+		notification.setAction(new GameplayAction(Action.FASCIST_POLICY, args));
+		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
+		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
+		myPlayer.setSecretRole(SecretRole.LIBERAL);
+		aj.setVote(Vote.JA);
+		sean.setVote(Vote.NEIN);
+		gameData.setPlayers(Arrays.asList(aj, sean, deadPlayer, fascist, liberal));
+		
+		processor.getActionToTake(notification);
+		
+		assertEquals("AJ should be a suspected Fascist", PartyMembership.FASCIST, boolProcessor.getSuspectedMembership("AJ"));
+		assertEquals("Sean should be a suspected Liberal", PartyMembership.LIBERAL, boolProcessor.getSuspectedMembership("Sean"));
 	}
 }
