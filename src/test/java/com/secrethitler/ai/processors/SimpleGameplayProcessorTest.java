@@ -1,6 +1,8 @@
 package com.secrethitler.ai.processors;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -21,6 +23,7 @@ import com.secrethitler.ai.dtos.PlayerData;
 import com.secrethitler.ai.enums.Action;
 import com.secrethitler.ai.enums.GamePhase;
 import com.secrethitler.ai.enums.PartyMembership;
+import com.secrethitler.ai.enums.Policy;
 import com.secrethitler.ai.enums.SecretRole;
 import com.secrethitler.ai.enums.Vote;
 import com.secrethitler.ai.utils.RandomUtil;
@@ -189,11 +192,13 @@ public class SimpleGameplayProcessorTest {
 	}
 	
 	private void testChooseRunningMate(Optional<GameplayAction> expectedResult) {
+		processor.vetoUsedThisTurn = true;
 		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
 		
 		Optional<GameplayAction> result = processor.getActionToTake(notification);
 		
 		assertEquals(expectedResult, result);
+		assertFalse("The vetoUsedThisTurn flag should be reset when a new running mate is chosen", processor.vetoUsedThisTurn);
 	}
 	
 	@Test
@@ -270,6 +275,149 @@ public class SimpleGameplayProcessorTest {
 	protected void testVote(Optional<GameplayAction> expectedResult, List<PlayerData> players) {
 		gameData.setPhase(GamePhase.ELECTION);
 		gameData.setPlayers(players);
+		
+		Optional<GameplayAction> result = processor.getActionToTake(notification);
+		
+		assertEquals(expectedResult, result);
+	}
+	
+	@Test
+	public void testMakePresidentChoice_NotPresident() {
+		testMakePresidentChoice(Optional.empty());
+	}
+	
+	@Test
+	public void testMakePresidentChoice_LiberalWithFascistPolicy() {		
+		testMakePresidentChoice_President(PartyMembership.LIBERAL, Arrays.asList(Policy.LIBERAL, Policy.FASCIST, Policy.FASCIST), 1);
+	}
+	
+	@Test
+	public void testMakePresidentChoice_LiberalWithAllLiberals() {		
+		testMakePresidentChoice_President(PartyMembership.LIBERAL, Arrays.asList(Policy.LIBERAL, Policy.LIBERAL, Policy.LIBERAL), 0);
+	}
+	
+	@Test
+	public void testMakePresidentChoice_FascistWithLiberalPolicy() {		
+		testMakePresidentChoice_President(PartyMembership.FASCIST, Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.LIBERAL), 2);
+	}
+	
+	@Test
+	public void testMakePresidentChoice_LiberalWithAllFascist() {		
+		testMakePresidentChoice_President(PartyMembership.FASCIST, Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.FASCIST), 0);
+	}
+	
+	private void testMakePresidentChoice_President(PartyMembership membership, List<Policy> policies, int expectedIndex) {
+		myPlayer.setPresident(true);
+		myPlayer.setPartyMembership(membership);
+		gameData.setPoliciesToView(policies);
+		String[] args = {Integer.toString(expectedIndex)};
+		
+		testMakePresidentChoice(Optional.of(new GameplayAction(Action.PRESIDENT_CHOICE, args)));
+	}
+	
+	private void testMakePresidentChoice(Optional<GameplayAction> expectedResult) {
+		gameData.setPhase(GamePhase.PRESIDENT_CHOICE);
+		
+		Optional<GameplayAction> result = processor.getActionToTake(notification);
+		
+		assertEquals(expectedResult, result);
+	}
+	
+	@Test
+	public void testMakeChancellorChoice_NotChancellor() {
+		testMakeChancellorChoice(Optional.empty());
+	}
+	
+	@Test
+	public void testMakeChancellorChoice_LiberalVeto() {
+		gameData.setVetoUnlocked(true);
+		String[] args = {};
+		
+		testMakeChancellorChoice_Chancellor(PartyMembership.LIBERAL, Arrays.asList(Policy.FASCIST, Policy.FASCIST), new GameplayAction(Action.CHANCELLOR_VETO, args));
+		
+		assertTrue("The processor should remember that a veto has already been used this turn", processor.vetoUsedThisTurn);
+	}
+	
+	@Test
+	public void testMakeChancellorChoice_FascistlVeto() {
+		gameData.setVetoUnlocked(true);
+		String[] args = {};
+		
+		testMakeChancellorChoice_Chancellor(PartyMembership.FASCIST, Arrays.asList(Policy.LIBERAL, Policy.LIBERAL), new GameplayAction(Action.CHANCELLOR_VETO, args));
+		
+		assertTrue("The processor should remember that a veto has already been used this turn", processor.vetoUsedThisTurn);
+	}
+	
+	@Test
+	public void testMakeChancellorChoice_LiberalWithLiberalPolicy() {
+		gameData.setVetoUnlocked(true);
+		
+		testMakeChancellorChoice_NoVeto(PartyMembership.LIBERAL, Arrays.asList(Policy.LIBERAL, Policy.FASCIST), 1);
+	}
+	
+	@Test
+	public void testMakeChancellorChoice_VetoNotUnlocked() {
+		testMakeChancellorChoice_NoVeto(PartyMembership.FASCIST, Arrays.asList(Policy.LIBERAL, Policy.LIBERAL), 0);
+	}
+	
+	@Test
+	public void testMakeChancellorChoice_VetoAlreadyUsed() {
+		processor.vetoUsedThisTurn = true;
+		gameData.setVetoUnlocked(true);
+		String[] args = {"0"};
+		
+		testMakeChancellorChoice_Chancellor(PartyMembership.LIBERAL, Arrays.asList(Policy.FASCIST, Policy.FASCIST), new GameplayAction(Action.CHANCELLOR_CHOICE, args));
+	}
+	
+	@Test
+	public void testMakeChancellorChoice_LiberalAllLiberals() {
+		testMakeChancellorChoice_NoVeto(PartyMembership.LIBERAL, Arrays.asList(Policy.LIBERAL, Policy.LIBERAL), 0);
+	}
+	
+	private void testMakeChancellorChoice_NoVeto(PartyMembership membership, List<Policy> policies, int expectedIndex) {
+		String[] args = {Integer.toString(expectedIndex)};
+		
+		testMakeChancellorChoice_Chancellor(membership, policies, new GameplayAction(Action.CHANCELLOR_CHOICE, args));
+		
+		assertFalse("The processor should know that a veto has not been used this turn", processor.vetoUsedThisTurn);
+	}
+	
+	private void testMakeChancellorChoice_Chancellor(PartyMembership membership, List<Policy> policies, GameplayAction gameplayAction) {
+		myPlayer.setChancellor(true);
+		myPlayer.setPartyMembership(membership);
+		gameData.setPoliciesToView(policies);
+		
+		testMakeChancellorChoice(Optional.of(gameplayAction));
+	}
+	
+	private void testMakeChancellorChoice(Optional<GameplayAction> expectedResult) {
+		gameData.setPhase(GamePhase.CHANCELLOR_CHOICE);
+		
+		Optional<GameplayAction> result = processor.getActionToTake(notification);
+		
+		assertEquals(expectedResult, result);
+	}
+	
+	@Test
+	public void testExamine_NotPresident() {
+		testExamine(Optional.empty());
+	}
+	
+	@Test
+	public void testExamine_President() {
+		testExamine_President(Arrays.asList(Policy.FASCIST, Policy.LIBERAL, Policy.FASCIST));
+	}
+	
+	protected void testExamine_President(List<Policy> policies) {
+		gameData.setPoliciesToView(policies);
+		myPlayer.setPresident(true);
+		String[] args = {};
+		
+		testExamine(Optional.of(new GameplayAction(Action.FINISH_EXAMINATION, args)));
+	}
+	
+	private void testExamine(Optional<GameplayAction> expectedResult) {
+		gameData.setPhase(GamePhase.EXAMINE);
 		
 		Optional<GameplayAction> result = processor.getActionToTake(notification);
 		

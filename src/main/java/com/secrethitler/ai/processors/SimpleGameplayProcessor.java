@@ -36,7 +36,7 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 	private final RandomUtil randomUtil;
 	private final Map<GamePhase, Function<GameData, Optional<GameplayAction>>> phaseToFunctionMap;
 	private final String username;
-	private boolean hasVetoed = false;
+	protected boolean vetoUsedThisTurn = false;
 	
 	public SimpleGameplayProcessor(final String username, final RandomUtil randomUtil) {
 		this.username = username;
@@ -61,7 +61,7 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 	}
 
 	protected Optional<GameplayAction> pickRunningMate(final GameData gameData) {
-		hasVetoed = false;
+		vetoUsedThisTurn = false;
 		if (!gameData.getMyPlayer().isPresident()) {
 			return Optional.empty();
 		}
@@ -156,8 +156,8 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 			return Optional.empty();
 		}
 		Policy preferredPolicyToDiscard = PREFERRED_POLICY_TO_DISCARD_MAP.get(gameData.getMyPlayer().getPartyMembership());
-		if (!hasVetoed && gameData.isVetoUnlocked() && gameData.getPoliciesToView().stream().allMatch(policy -> preferredPolicyToDiscard == policy)) {
-			hasVetoed = true;
+		if (!vetoUsedThisTurn && gameData.isVetoUnlocked() && gameData.getPoliciesToView().stream().allMatch(policy -> preferredPolicyToDiscard == policy)) {
+			vetoUsedThisTurn = true;
 			String[] args = {};
 			LOGGER.info(() -> String.format("%s is vetoing the policies", username));
 			return Optional.of(new GameplayAction(Action.CHANCELLOR_VETO, args));
@@ -174,9 +174,14 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		if (!gameData.getMyPlayer().isPresident()) {
 			return Optional.empty();
 		}
+		examinationHelper(gameData);
 		String[] args = {};
 		LOGGER.info(() -> String.format("%s is examining the top three policies", username));
 		return Optional.of(new GameplayAction(Action.FINISH_EXAMINATION, args));
+	}
+	
+	protected void examinationHelper(final GameData gameData) {
+		//do nothing for simple gameplay
 	}
 	
 	protected Optional<GameplayAction> kill(final GameData gameData) {

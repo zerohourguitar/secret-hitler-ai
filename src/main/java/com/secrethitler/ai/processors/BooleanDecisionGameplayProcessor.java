@@ -1,6 +1,7 @@
 package com.secrethitler.ai.processors;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -58,12 +59,14 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 	private final Map<Action, Consumer<GameData>> actionToDeduceMap;
 	
 	private Map<String, PartyMembership> suspectedMemberships = new HashMap<>();
+	
+	protected boolean policyOptionForNextGovernment = true;
 
 	public BooleanDecisionGameplayProcessor(final String username, final RandomUtil randomUtil) {
 		super(username, randomUtil);
 		actionToDeduceMap = ImmutableMap.<Action, Consumer<GameData>>builder()
 				.put(Action.DENIED, this::governmentDeniedDeducer)
-				.put(Action.ANARCHY, this::governmentDeniedDeducer)
+				.put(Action.ANARCHY, this::anarchyDeducer)
 				.put(Action.FASCIST_POLICY, this::fascistPolicyDeducer)
 				.put(Action.LIBERAL_POLICY, this::liberalPolicyDeducer)
 				.put(Action.KILL_PLAYER, this::playerKilledDeducer)
@@ -151,6 +154,11 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 				});
 	}
 	
+	protected void anarchyDeducer(final GameData gameData) {
+		policyOptionForNextGovernment = true;
+		governmentDeniedDeducer(gameData);
+	}
+	
 	protected void fascistPolicyDeducer(final GameData gameData) {
 		policyPlayedDeducer(gameData, Policy.FASCIST);
 	}
@@ -160,14 +168,23 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 	}
 	
 	protected void policyPlayedDeducer(final GameData gameData, Policy policy) {
-		gameData.getPlayers().stream()
-				.filter(PlayerData::isAlive)
-				.filter(player -> PartyMembership.UNKNOWN == player.getPartyMembership())
-				.forEach(player -> {
-					Policy policyVotedFor = Vote.JA == player.getVote() ?
-							policy : getOppositePolicy(policy);
-					setSuspectedMembership(player, getSuspectedMembershipFromPolicy(policyVotedFor));
-				});
+		if (policyOptionForNextGovernment) {
+			gameData.getPlayers().stream()
+					.filter(PlayerData::isAlive)
+					.filter(player -> PartyMembership.UNKNOWN == player.getPartyMembership())
+					.forEach(player -> {
+						Policy policyVotedFor = Vote.JA == player.getVote() ?
+								policy : getOppositePolicy(policy);
+						setSuspectedMembership(player, getSuspectedMembershipFromPolicy(policyVotedFor));
+					});
+		}
+		policyOptionForNextGovernment = true;
+	}
+	
+	@Override
+	protected void examinationHelper(final GameData gameData) {
+		Set<Policy> uniquePolicies = new HashSet<>(gameData.getPoliciesToView());
+		policyOptionForNextGovernment = uniquePolicies.size() != 1;
 	}
 	
 	protected void playerKilledDeducer(final GameData gameData) {

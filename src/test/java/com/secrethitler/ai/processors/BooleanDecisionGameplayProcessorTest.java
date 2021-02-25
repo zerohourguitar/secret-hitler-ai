@@ -1,6 +1,7 @@
 package com.secrethitler.ai.processors;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.verify;
@@ -20,6 +21,7 @@ import com.secrethitler.ai.dtos.PlayerData;
 import com.secrethitler.ai.enums.Action;
 import com.secrethitler.ai.enums.GamePhase;
 import com.secrethitler.ai.enums.PartyMembership;
+import com.secrethitler.ai.enums.Policy;
 import com.secrethitler.ai.enums.SecretRole;
 import com.secrethitler.ai.enums.Vote;
 
@@ -228,19 +230,37 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 		
 		assertEquals("AJ should be a suspected Fascist", PartyMembership.FASCIST, boolProcessor.getSuspectedMembership("AJ"));
 		assertEquals("Sean should be a suspected Liberal", PartyMembership.LIBERAL, boolProcessor.getSuspectedMembership("Sean"));
+		assertTrue("policyOptionForNextGovernment flag should remain true", boolProcessor.policyOptionForNextGovernment);
 	}
 	
 	@Test
 	public void testGovernmentDenied_HitlerNein() {
+		boolProcessor.policyOptionForNextGovernment = false;
 		testGovernmentDenied(PartyMembership.FASCIST, SecretRole.HITLER, Vote.NEIN);
 		
 		assertEquals("AJ should be a suspected Liberal", PartyMembership.LIBERAL, boolProcessor.getSuspectedMembership("AJ"));
 		assertEquals("Sean should be a suspected Fascist", PartyMembership.FASCIST, boolProcessor.getSuspectedMembership("Sean"));
+		assertFalse("policyOptionForNextGovernment flag should remain false", boolProcessor.policyOptionForNextGovernment);
+	}
+	
+	@Test
+	public void testAnarchy() {
+		boolProcessor.policyOptionForNextGovernment = false;
+		
+		testGovernmentDenied(PartyMembership.LIBERAL, SecretRole.LIBERAL, Vote.JA, Action.ANARCHY);
+		
+		assertEquals("AJ should be a suspected Liberal", PartyMembership.LIBERAL, boolProcessor.getSuspectedMembership("AJ"));
+		assertEquals("Sean should be a suspected Fascist", PartyMembership.FASCIST, boolProcessor.getSuspectedMembership("Sean"));	
+		assertTrue("policyOptionForNextGovernment flag should be reset", boolProcessor.policyOptionForNextGovernment);
 	}
 	
 	private void testGovernmentDenied(PartyMembership myMembership, SecretRole myRole, Vote myVote) {
+		testGovernmentDenied(myMembership, myRole, myVote, Action.DENIED);
+	}
+	
+	private void testGovernmentDenied(PartyMembership myMembership, SecretRole myRole, Vote myVote, Action action) {
 		String[] args = {};
-		notification.setAction(new GameplayAction(Action.DENIED, args));
+		notification.setAction(new GameplayAction(action, args));
 		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
 		myPlayer.setPartyMembership(myMembership);
 		myPlayer.setSecretRole(myRole);
@@ -250,6 +270,25 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 		gameData.setPlayers(Arrays.asList(aj, sean, fascist, fascist2, liberal, liberal2, myPlayer));
 		
 		processor.getActionToTake(notification);
+	}
+	
+	@Test
+	public void testPolicyPlayed_NoPolicyOption() {
+		boolProcessor.policyOptionForNextGovernment = false;
+		String[] args = {};
+		notification.setAction(new GameplayAction(Action.LIBERAL_POLICY, args));
+		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
+		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
+		myPlayer.setSecretRole(SecretRole.LIBERAL);
+		aj.setVote(Vote.JA);
+		sean.setVote(Vote.NEIN);
+		gameData.setPlayers(Arrays.asList(aj, sean, deadPlayer, fascist, liberal));
+		
+		processor.getActionToTake(notification);
+		
+		assertEquals("AJ should still be unknown", PartyMembership.UNKNOWN, boolProcessor.getSuspectedMembership("AJ"));
+		assertEquals("Sean should still be unknown", PartyMembership.UNKNOWN, boolProcessor.getSuspectedMembership("Sean"));
+		assertTrue("policyOptionForNextGovernment flag should be reset", boolProcessor.policyOptionForNextGovernment);
 	}
 	
 	@Test
@@ -267,6 +306,7 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 		
 		assertEquals("AJ should be a suspected Liberal", PartyMembership.LIBERAL, boolProcessor.getSuspectedMembership("AJ"));
 		assertEquals("Sean should be a suspected Fascist", PartyMembership.FASCIST, boolProcessor.getSuspectedMembership("Sean"));
+		assertTrue("policyOptionForNextGovernment flag should remain true", boolProcessor.policyOptionForNextGovernment);
 	}
 	
 	@Test
@@ -284,5 +324,29 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 		
 		assertEquals("AJ should be a suspected Fascist", PartyMembership.FASCIST, boolProcessor.getSuspectedMembership("AJ"));
 		assertEquals("Sean should be a suspected Liberal", PartyMembership.LIBERAL, boolProcessor.getSuspectedMembership("Sean"));
+		assertTrue("policyOptionForNextGovernment flag should remain true", boolProcessor.policyOptionForNextGovernment);
 	}
+	
+	@Override
+	@Test
+	public void testExamine_President() {
+		super.testExamine_President();
+		
+		assertTrue("The next government has a choice for their policy", boolProcessor.policyOptionForNextGovernment);
+	}
+	
+	@Test
+	public void testExamine_AllFascist() {
+		testExamine_President(Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.FASCIST));
+		
+		assertFalse("The next government does not have a choice for their policy", boolProcessor.policyOptionForNextGovernment);
+	}
+	
+	@Test
+	public void testExamine_AllLiberal() {		
+		testExamine_President(Arrays.asList(Policy.LIBERAL, Policy.LIBERAL, Policy.LIBERAL));
+		
+		assertFalse("The next government does not have a choice for their policy", boolProcessor.policyOptionForNextGovernment);
+	}
+	
 }
