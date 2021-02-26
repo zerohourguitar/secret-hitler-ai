@@ -12,6 +12,7 @@ import java.util.stream.Stream;
 
 import org.apache.commons.collections4.CollectionUtils;
 
+import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.secrethitler.ai.dtos.GameData;
@@ -28,14 +29,28 @@ import com.secrethitler.ai.utils.RandomUtil;
 
 public class SimpleGameplayProcessor implements GameplayProcessor {
 	private static final Logger LOGGER = Logger.getLogger(SimpleGameplayProcessor.class.getName());
-	protected static final Map<PartyMembership, Policy> PREFERRED_POLICY_TO_DISCARD_MAP = ImmutableMap.<PartyMembership, Policy>builder()
+	private static final Map<PartyMembership, Policy> PREFERRED_POLICY_TO_DISCARD_MAP = ImmutableMap.<PartyMembership, Policy>builder()
 			.put(PartyMembership.LIBERAL, Policy.FASCIST)
 			.put(PartyMembership.FASCIST, Policy.LIBERAL)
 			.build();
 	
+	private static final Map<PartyMembership, PartyMembership> OPPOSITE_MEMBERSHIP_MAP = ImmutableMap.<PartyMembership, PartyMembership>builder()
+			.put(PartyMembership.FASCIST, PartyMembership.LIBERAL)
+			.put(PartyMembership.LIBERAL, PartyMembership.FASCIST)
+			.put(PartyMembership.UNKNOWN, PartyMembership.UNKNOWN)
+			.build();
+	
+	protected static Policy getPreferredPolicyToDiscard(final PartyMembership membership) {
+		return PREFERRED_POLICY_TO_DISCARD_MAP.get(membership);
+	}
+	
+	protected static PartyMembership getOppositeMembership(final PartyMembership membership) {
+		return OPPOSITE_MEMBERSHIP_MAP.get(membership);
+	}
+	
 	private final RandomUtil randomUtil;
 	private final Map<GamePhase, Function<GameData, Optional<GameplayAction>>> phaseToFunctionMap;
-	private final String username;
+	protected final String username;
 	protected boolean vetoUsedThisTurn = false;
 	
 	public SimpleGameplayProcessor(final String username, final RandomUtil randomUtil) {
@@ -142,7 +157,7 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		if (!gameData.getMyPlayer().isPresident()) {
 			return Optional.empty();
 		}
-		Policy preferredPolicyToDiscard = PREFERRED_POLICY_TO_DISCARD_MAP.get(gameData.getMyPlayer().getPartyMembership());
+		Policy preferredPolicyToDiscard = getPreferredPolicyToDiscard(gameData.getMyPlayer().getPartyMembership());
 		List<Policy> policies = gameData.getPoliciesToView();
 		int preferredIndex = policies.indexOf(preferredPolicyToDiscard);
 		int index = preferredIndex == -1 ? 0 : preferredIndex;
@@ -155,7 +170,7 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		if (!gameData.getMyPlayer().isChancellor()) {
 			return Optional.empty();
 		}
-		Policy preferredPolicyToDiscard = PREFERRED_POLICY_TO_DISCARD_MAP.get(gameData.getMyPlayer().getPartyMembership());
+		Policy preferredPolicyToDiscard = getPreferredPolicyToDiscard(gameData.getMyPlayer().getPartyMembership());
 		if (!vetoUsedThisTurn && gameData.isVetoUnlocked() && gameData.getPoliciesToView().stream().allMatch(policy -> preferredPolicyToDiscard == policy)) {
 			vetoUsedThisTurn = true;
 			String[] args = {};
@@ -191,15 +206,10 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		final PlayerData myPlayer = gameData.getMyPlayer();
 		List<PlayerData> allPlayers = gameData.getPlayers();
 		List<PlayerData> eligiblePlayers = allPlayers.stream()
-				.filter(player -> !myPlayer.equals(player))
+				.filter(Predicates.not(myPlayer::equals))
 				.filter(PlayerData::isAlive)
 				.collect(Collectors.toList());
-		List<PlayerData> preferredPlayers = eligiblePlayers.stream()
-				.filter(player -> PartyMembership.UNKNOWN != player.getPartyMembership() && myPlayer.getPartyMembership() != player.getPartyMembership())
-				.collect(Collectors.toList());
-		if (preferredPlayers.isEmpty()) {
-			preferredPlayers = eligiblePlayers;
-		}
+		List<PlayerData> preferredPlayers = getPreferredPlayers(getOppositeMembership(myPlayer.getPartyMembership()), eligiblePlayers);
 		PlayerData playerToKill = randomUtil.getRandomItemFromList(preferredPlayers);
 		String[] args = {String.valueOf(playerToKill.getUsername())};
 		LOGGER.info(() -> String.format("%s is killing %s", username, playerToKill.getUsername()));
@@ -210,11 +220,16 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		if (!gameData.getMyPlayer().isPresident()) {
 			return Optional.empty();
 		}
-		Policy preferredPolicyToDiscard = PREFERRED_POLICY_TO_DISCARD_MAP.get(gameData.getMyPlayer().getPartyMembership());
-		boolean concur = gameData.getPoliciesToView().stream().allMatch(policy -> preferredPolicyToDiscard == policy);
+		boolean concur = presidentVetoHelper(gameData);
+		presidentVetoHelper(gameData);
 		String[] args = {Boolean.toString(concur)};
 		LOGGER.info(() -> String.format("%s is agreeing to the veto", username));
 		return Optional.of(new GameplayAction(Action.PRESIDENT_VETO, args));
+	}
+	
+	protected boolean presidentVetoHelper(final GameData gameData) {
+		Policy preferredPolicyToDiscard = getPreferredPolicyToDiscard(gameData.getMyPlayer().getPartyMembership());
+		return gameData.getPoliciesToView().stream().allMatch(policy -> preferredPolicyToDiscard == policy);
 	}
 	
 	protected Optional<GameplayAction> investigate(final GameData gameData) {
@@ -225,15 +240,22 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 				.filter(player -> !gameData.getMyPlayer().equals(player))
 				.filter(PlayerData::isAlive)
 				.collect(Collectors.toList());
-		List<PlayerData> preferredPlayers = availablePlayers.stream()
-				.filter(player -> PartyMembership.UNKNOWN != player.getPartyMembership())
+		List<PlayerData> unknownPlayers = availablePlayers.stream()
+				.filter(player -> PartyMembership.UNKNOWN == player.getPartyMembership())
 				.collect(Collectors.toList());
-		if (preferredPlayers.isEmpty()) {
+		List<PlayerData> preferredPlayers;
+		if (unknownPlayers.isEmpty()) {
 			preferredPlayers = availablePlayers;
+		} else {
+			preferredPlayers = getPreferredPlayersToInvestigate(unknownPlayers);
 		}
 		PlayerData playerToInvestigate = randomUtil.getRandomItemFromList(preferredPlayers);
 		String[] args = {playerToInvestigate.getUsername()};
 		return Optional.of(new GameplayAction(Action.INVESTIGATE_PLAYER, args));
+	}
+	
+	protected List<PlayerData> getPreferredPlayersToInvestigate(List<PlayerData> unknownPlayers) {
+		return unknownPlayers;
 	}
 	
 	protected Optional<GameplayAction> chooseNextPresidentialCandidate(final GameData gameData) {
@@ -242,16 +264,11 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		}
 		final PlayerData myPlayer = gameData.getMyPlayer();
 		List<PlayerData> allPlayers = gameData.getPlayers();
-		List<PlayerData> availablePlayers = allPlayers.stream()
+		List<PlayerData> eligiblePlayers = allPlayers.stream()
 				.filter(player -> !myPlayer.equals(player))
 				.filter(PlayerData::isAlive)
 				.collect(Collectors.toList());
-		List<PlayerData> preferredPlayers = availablePlayers.stream()
-				.filter(player -> myPlayer.getPartyMembership() == player.getPartyMembership())
-				.collect(Collectors.toList());
-		if (preferredPlayers.isEmpty()) {
-			preferredPlayers = availablePlayers;
-		}
+		List<PlayerData> preferredPlayers = getPreferredPlayers(myPlayer.getPartyMembership(), eligiblePlayers);
 		PlayerData nextCandidate = randomUtil.getRandomItemFromList(preferredPlayers);
 		String[] args = {Integer.toString(allPlayers.indexOf(nextCandidate))};
 		return Optional.of(new GameplayAction(Action.CHOOSE_NEXT_PRESIDENTIAL_CANDIDATE, args));

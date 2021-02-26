@@ -1,12 +1,16 @@
 package com.secrethitler.ai.processors;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -23,29 +27,26 @@ import com.secrethitler.ai.enums.SecretRole;
 import com.secrethitler.ai.enums.Vote;
 import com.secrethitler.ai.utils.RandomUtil;
 
-public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
-	private static Map<PartyMembership, PartyMembership> OPPOSITE_MEMBERSHIP_MAP = ImmutableMap.<PartyMembership, PartyMembership>builder()
-			.put(PartyMembership.FASCIST, PartyMembership.LIBERAL)
-			.put(PartyMembership.LIBERAL, PartyMembership.FASCIST)
-			.put(PartyMembership.UNKNOWN, PartyMembership.UNKNOWN)
-			.build();
-	
-	private static Map<Policy, Policy> OPPOSITE_POLICY_MAP = ImmutableMap.<Policy, Policy>builder()
+public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {	
+	private static final Logger LOGGER = Logger.getLogger(BooleanDecisionGameplayProcessor.class.getName());
+	private static final Map<Policy, Policy> OPPOSITE_POLICY_MAP = ImmutableMap.<Policy, Policy>builder()
 			.put(Policy.FASCIST, Policy.LIBERAL)
 			.put(Policy.LIBERAL, Policy.FASCIST)
 			.build();
 	
-	private static Map<Policy, PartyMembership> POLICY_TO_MEMBERSHIP_MAP = ImmutableMap.<Policy, PartyMembership>builder()
+	private static final Map<Policy, PartyMembership> POLICY_TO_MEMBERSHIP_MAP = ImmutableMap.<Policy, PartyMembership>builder()
 			.put(Policy.FASCIST, PartyMembership.FASCIST)
 			.put(Policy.LIBERAL, PartyMembership.LIBERAL)
 			.build();
 	
+	private static final Map<PartyMembership, Integer> SUSPECTED_PARTY_MEMBERSHIP_INVESTIGATION_ORDER = ImmutableMap.<PartyMembership, Integer>builder()
+			.put(PartyMembership.FASCIST, 1)
+			.put(PartyMembership.UNKNOWN, 2)
+			.put(PartyMembership.LIBERAL, 3)
+			.build();
+	
 	protected static boolean playerKnowsRoles(SecretRole myRole, int numberOfPlayers) {
 		return SecretRole.FASCIST == myRole || (SecretRole.HITLER == myRole && numberOfPlayers < 7);
-	}
-	
-	protected static PartyMembership getOppositeMembership(final PartyMembership membership) {
-		return OPPOSITE_MEMBERSHIP_MAP.get(membership);
 	}
 	
 	protected static Policy getOppositePolicy(final Policy policy) {
@@ -56,23 +57,35 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 		return POLICY_TO_MEMBERSHIP_MAP.get(policy);
 	}
 	
-	private final Map<Action, Consumer<GameData>> actionToDeduceMap;
+	protected static int getOrderWeightOfSuspectedMembership(PartyMembership suspectedMembership) {
+		return SUSPECTED_PARTY_MEMBERSHIP_INVESTIGATION_ORDER.get(suspectedMembership);
+	}
+	
+	protected static PlayerData getPlayerByUsername(final List<PlayerData> players, final String username) {
+		return players.stream()
+				.filter(player -> username.equals(player.getUsername()))
+				.findAny()
+				.orElse(null);
+	}
+	
+	private final Map<Action, Consumer<ParticipantGameNotification>> actionToDeduceMap;
 	
 	private Map<String, PartyMembership> suspectedMemberships = new HashMap<>();
 	
 	protected boolean policyOptionForNextGovernment = true;
+	protected Optional<String> vetoRequestor = Optional.empty();
 
 	public BooleanDecisionGameplayProcessor(final String username, final RandomUtil randomUtil) {
 		super(username, randomUtil);
-		actionToDeduceMap = ImmutableMap.<Action, Consumer<GameData>>builder()
+		actionToDeduceMap = ImmutableMap.<Action, Consumer<ParticipantGameNotification>>builder()
 				.put(Action.DENIED, this::governmentDeniedDeducer)
 				.put(Action.ANARCHY, this::anarchyDeducer)
 				.put(Action.FASCIST_POLICY, this::fascistPolicyDeducer)
 				.put(Action.LIBERAL_POLICY, this::liberalPolicyDeducer)
 				.put(Action.KILL_PLAYER, this::playerKilledDeducer)
 				.put(Action.CHOOSE_NEXT_PRESIDENTIAL_CANDIDATE, this::specialElectionChosenDeducer)
+				.put(Action.CHANCELLOR_VETO, this::chancellorVetoDeducer)
 				.put(Action.PRESIDENT_VETO_YES, this::presidentVetoDeducer)
-				.put(Action.PRESIDENT_VETO_NO, this::presidentVetoDeducer)
 				.build();
 	}
 	
@@ -80,18 +93,20 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 		return suspectedMemberships.getOrDefault(username, PartyMembership.UNKNOWN);
 	}
 	
-	protected void setSuspectedMembership(PlayerData player, PartyMembership membership) {
+	protected void setSuspectedMembership(final PlayerData player, final PartyMembership membership) {
 		if (player.getPartyMembership() != PartyMembership.UNKNOWN && membership != player.getPartyMembership()) {
 			throw new IllegalArgumentException("Tried to set a suspected membership of a player that is known to be incorrect!");
 		}
-		suspectedMemberships.put(player.getUsername(), membership);
+		final String suspectUsername = player.getUsername();
+		LOGGER.info(() -> String.format("%s suspects %s of being a %s", username, suspectUsername, membership.name()));
+		suspectedMemberships.put(suspectUsername, membership);
 	}
 
 	@Override
 	public Optional<GameplayAction> getActionToTake(final ParticipantGameNotification notification) {
 		GameData gameData = notification.getGameData();
 		if (!playerKnowsRoles(gameData.getMyPlayer().getSecretRole(), gameData.getPlayers().size())) {
-			actionToDeduceMap.getOrDefault(notification.getAction().getAction(), data -> {}).accept(gameData);
+			actionToDeduceMap.getOrDefault(notification.getAction().getAction(), data -> {}).accept(notification);
 		}
 		return super.getActionToTake(notification);
 	}
@@ -111,37 +126,43 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 	protected boolean isVoteJa(Stream<PlayerData> governmentStream, PartyMembership myMembership, SecretRole myRole, int numberOfPlayers) {
 		if (!playerKnowsRoles(myRole, numberOfPlayers)) {
 			List<PlayerData> government = governmentStream.collect(Collectors.toList());
-			Set<PartyMembership> knownMemberships = government.stream()
-					.map(PlayerData::getPartyMembership)
-					.filter(membership -> PartyMembership.UNKNOWN != membership)
-					.collect(Collectors.toSet());
-			PartyMembership suspectedMembership = PartyMembership.UNKNOWN;
-			if (knownMemberships.size() == 1) {
-				PartyMembership knownMembership = knownMemberships.stream().findAny().get();
-				suspectedMembership = knownMembership;
-				government.forEach(player -> setSuspectedMembership(player, knownMembership));
-			} else if (knownMemberships.size() == 2) {
-				suspectedMembership = PartyMembership.FASCIST;
-			} else {
-				Set<PartyMembership> govtSuspectedMemberships = government.stream()
-						.map(player -> getSuspectedMembership(player.getUsername()))
-						.filter(membership -> PartyMembership.UNKNOWN != membership)
-						.collect(Collectors.toSet());
-				if (govtSuspectedMemberships.size() == 1) {
-					suspectedMembership = govtSuspectedMemberships.stream().findAny().get();
-					final PartyMembership newSuspectedMembership = suspectedMembership;
-					government.forEach(player -> setSuspectedMembership(player, newSuspectedMembership));
-				} else if (govtSuspectedMemberships.size() == 2) {
-					government.forEach(player -> setSuspectedMembership(player, PartyMembership.UNKNOWN));
-				}
-			}
+			PartyMembership suspectedMembership = updateSuspectedMembershipForChosenTeam(government);
 			
 			return ImmutableSet.of(PartyMembership.UNKNOWN, myMembership).contains(suspectedMembership);
 		}
 		return governmentStream.anyMatch(player -> PartyMembership.FASCIST == player.getPartyMembership());
 	}
+
+	private PartyMembership updateSuspectedMembershipForChosenTeam(List<PlayerData> team) {
+		Set<PartyMembership> knownMemberships = team.stream()
+				.map(PlayerData::getPartyMembership)
+				.filter(membership -> PartyMembership.UNKNOWN != membership)
+				.collect(Collectors.toSet());
+		PartyMembership suspectedMembership = PartyMembership.UNKNOWN;
+		if (knownMemberships.size() == 1) {
+			PartyMembership knownMembership = knownMemberships.stream().findAny().orElse(null);
+			suspectedMembership = knownMembership;
+			team.forEach(player -> setSuspectedMembership(player, knownMembership));
+		} else if (knownMemberships.size() == 2) {
+			suspectedMembership = PartyMembership.FASCIST;
+		} else {
+			Set<PartyMembership> govtSuspectedMemberships = team.stream()
+					.map(player -> getSuspectedMembership(player.getUsername()))
+					.filter(membership -> PartyMembership.UNKNOWN != membership)
+					.collect(Collectors.toSet());
+			if (govtSuspectedMemberships.size() == 1) {
+				suspectedMembership = govtSuspectedMemberships.stream().findAny().orElse(null);
+				final PartyMembership newSuspectedMembership = suspectedMembership;
+				team.forEach(player -> setSuspectedMembership(player, newSuspectedMembership));
+			} else if (govtSuspectedMemberships.size() == 2) {
+				team.forEach(player -> setSuspectedMembership(player, PartyMembership.UNKNOWN));
+			}
+		}
+		return suspectedMembership;
+	}
 	
-	protected void governmentDeniedDeducer(final GameData gameData) {
+	protected void governmentDeniedDeducer(final ParticipantGameNotification notification) {
+		GameData gameData = notification.getGameData();
 		PlayerData myPlayer = gameData.getMyPlayer();
 		PartyMembership myMembership = myPlayer.getPartyMembership();
 		gameData.getPlayers().stream()
@@ -154,31 +175,36 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 				});
 	}
 	
-	protected void anarchyDeducer(final GameData gameData) {
+	protected void anarchyDeducer(final ParticipantGameNotification notification) {
 		policyOptionForNextGovernment = true;
-		governmentDeniedDeducer(gameData);
+		governmentDeniedDeducer(notification);
 	}
 	
-	protected void fascistPolicyDeducer(final GameData gameData) {
-		policyPlayedDeducer(gameData, Policy.FASCIST);
+	protected void fascistPolicyDeducer(final ParticipantGameNotification notification) {
+		policyPlayedDeducer(notification, Policy.FASCIST);
 	}
 	
-	protected void liberalPolicyDeducer(final GameData gameData) {
-		policyPlayedDeducer(gameData, Policy.LIBERAL);
+	protected void liberalPolicyDeducer(final ParticipantGameNotification notification) {
+		policyPlayedDeducer(notification, Policy.LIBERAL);
 	}
 	
-	protected void policyPlayedDeducer(final GameData gameData, Policy policy) {
+	protected void policyPlayedDeducer(final ParticipantGameNotification notification, Policy policy) {
 		if (policyOptionForNextGovernment) {
-			gameData.getPlayers().stream()
+			notification.getGameData().getPlayers().stream()
 					.filter(PlayerData::isAlive)
 					.filter(player -> PartyMembership.UNKNOWN == player.getPartyMembership())
 					.forEach(player -> {
-						Policy policyVotedFor = Vote.JA == player.getVote() ?
-								policy : getOppositePolicy(policy);
-						setSuspectedMembership(player, getSuspectedMembershipFromPolicy(policyVotedFor));
+						if (vetoRequestor.isPresent() && player.getUsername().equals(vetoRequestor.get())) {
+							setSuspectedMembership(player, getSuspectedMembershipFromPolicy(getOppositePolicy(policy)));
+						} else {
+							Policy policyVotedFor = Vote.JA == player.getVote() ?
+									policy : getOppositePolicy(policy);
+							setSuspectedMembership(player, getSuspectedMembershipFromPolicy(policyVotedFor));
+						}
 					});
 		}
 		policyOptionForNextGovernment = true;
+		vetoRequestor = Optional.empty();
 	}
 	
 	@Override
@@ -187,16 +213,76 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 		policyOptionForNextGovernment = uniquePolicies.size() != 1;
 	}
 	
-	protected void playerKilledDeducer(final GameData gameData) {
-		
+	protected void playerKilledDeducer(final ParticipantGameNotification notification) {
+		String[] args = notification.getAction().getArgs();
+		String killerName = args[0];
+		GameData gameData = notification.getGameData();
+		if (killerName.equals(gameData.getMyPlayer().getUsername())) {
+			return;
+		}
+		PlayerData killer = gameData.getPlayers().stream()
+				.filter(player -> killerName.equals(player.getUsername()))
+				.findAny()
+				.orElseThrow(() -> new IllegalStateException("Killer not found!"));
+		if (PartyMembership.UNKNOWN != killer.getPartyMembership()) {
+			return;
+		}
+		String victimName = args[1];
+		PartyMembership suspectedVictimParty = getSuspectedMembership(victimName);
+		if (PartyMembership.UNKNOWN == suspectedVictimParty) {
+			return;
+		}
+		setSuspectedMembership(killer, getOppositeMembership(suspectedVictimParty));
 	}
 	
-	protected void specialElectionChosenDeducer(final GameData gameData) {
-		
+	@Override
+	protected boolean presidentVetoHelper(final GameData gameData) {
+		boolean concur = super.presidentVetoHelper(gameData);
+		Set<Policy> uniquePolicies = new HashSet<>(gameData.getPoliciesToView());
+		if (uniquePolicies.size() == 1) {
+			PartyMembership membership = gameData.getMyPlayer().getPartyMembership();
+			gameData.getPlayers().stream()
+					.filter(PlayerData::isChancellor)
+					.filter(chancellor -> PartyMembership.UNKNOWN == chancellor.getPartyMembership())
+					.forEach(chancellor -> setSuspectedMembership(chancellor, concur ? 
+							membership : getOppositeMembership(membership)));
+		}
+		return concur;
 	}
 	
-	protected void presidentVetoDeducer(final GameData gameData) {
-		
+	@Override
+	protected List<PlayerData> getPreferredPlayersToInvestigate(List<PlayerData> unknownPlayers) {
+		return unknownPlayers.stream()
+				.collect(Collectors.groupingBy(player -> 
+						getOrderWeightOfSuspectedMembership(
+								getSuspectedMembership(player.getUsername())))).entrySet().stream()
+				.sorted((entry1, entry2) -> entry1.getKey().compareTo(entry2.getKey()))
+				.findFirst()
+				.map(Entry::getValue)
+				.orElse(Collections.emptyList());
+	}
+	
+	protected void specialElectionChosenDeducer(final ParticipantGameNotification notification) {
+		updateSuspectedMembershipForChosenTeam(
+				Stream.of(notification.getAction().getArgs())
+						.map(username -> getPlayerByUsername(notification.getGameData().getPlayers(), username))
+						.collect(Collectors.toList()));
+	}
+	
+	protected void chancellorVetoDeducer(final ParticipantGameNotification notification) {
+		vetoRequestor = Optional.of(notification.getAction().getArgs()[0]);
+	}
+	
+	protected void presidentVetoDeducer(final ParticipantGameNotification notification) {
+		final String presidentName = notification.getAction().getArgs()[0];
+		GameData gameData = notification.getGameData();
+		if (presidentName.contentEquals(gameData.getMyPlayer().getUsername())) {
+			return;
+		}
+		List<PlayerData> players = gameData.getPlayers();
+		updateSuspectedMembershipForChosenTeam(Arrays.asList(
+				getPlayerByUsername(players, presidentName), 
+				getPlayerByUsername(players, vetoRequestor.orElse(null))));
 	}
 	
 }

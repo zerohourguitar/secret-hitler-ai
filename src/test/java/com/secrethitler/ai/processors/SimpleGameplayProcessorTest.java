@@ -54,6 +54,7 @@ public class SimpleGameplayProcessorTest {
 		gameData = new GameData();
 		notification.setGameData(gameData);
 		myPlayer = new PlayerData();
+		myPlayer.setUsername("Robot 1");
 		myPlayer.setAlive(true);
 		gameData.setMyPlayer(myPlayer);
 		previousGovernmentMember = new PlayerData();
@@ -418,6 +419,197 @@ public class SimpleGameplayProcessorTest {
 	
 	private void testExamine(Optional<GameplayAction> expectedResult) {
 		gameData.setPhase(GamePhase.EXAMINE);
+		
+		Optional<GameplayAction> result = processor.getActionToTake(notification);
+		
+		assertEquals(expectedResult, result);
+	}
+	
+	@Test
+	public void testKill_NotPresident() {
+		testKill(Optional.empty());
+	}
+	
+	@Test
+	public void testKill_LiberalWithFascists() {
+		myPlayer.setPresident(true);
+		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
+		myPlayer.setSecretRole(SecretRole.LIBERAL);
+		gameData.setPlayers(Arrays.asList(myPlayer, fascist, liberal, unknown, liberal2, unknown2, fascist2, deadPlayer));
+		String[] args = {"Fascist2"};
+		when(randomUtil.getRandomItemFromList(Arrays.asList(fascist, fascist2))).thenReturn(fascist2);
+		
+		testKill(Optional.of(new GameplayAction(Action.KILL_PLAYER, args)));
+		
+		verify(randomUtil).getRandomItemFromList(Arrays.asList(fascist, fascist2));
+	}
+	
+	@Test
+	public void testKill_FascistWithLiberals() {
+		myPlayer.setPresident(true);
+		myPlayer.setPartyMembership(PartyMembership.FASCIST);
+		myPlayer.setSecretRole(SecretRole.FASCIST);
+		gameData.setPlayers(Arrays.asList(myPlayer, fascist, liberal, unknown, liberal2, unknown2, fascist2, deadPlayer));
+		String[] args = {"Liberal"};
+		when(randomUtil.getRandomItemFromList(Arrays.asList(liberal, liberal2))).thenReturn(liberal);
+		
+		testKill(Optional.of(new GameplayAction(Action.KILL_PLAYER, args)));
+		
+		verify(randomUtil).getRandomItemFromList(Arrays.asList(liberal, liberal2));
+	}
+	
+	@Test
+	public void testKill_Unknown() {
+		myPlayer.setPresident(true);
+		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
+		myPlayer.setSecretRole(SecretRole.LIBERAL);
+		gameData.setPlayers(Arrays.asList(myPlayer, unknown, unknown2, deadPlayer));
+		String[] args = {"Unknown"};
+		when(randomUtil.getRandomItemFromList(Arrays.asList(unknown, unknown2))).thenReturn(unknown);
+		
+		testKill(Optional.of(new GameplayAction(Action.KILL_PLAYER, args)));
+		
+		verify(randomUtil).getRandomItemFromList(Arrays.asList(unknown, unknown2));
+	}
+	
+	protected void testKill(Optional<GameplayAction> expectedResult) {
+		gameData.setPhase(GamePhase.KILL);
+		
+		Optional<GameplayAction> result = processor.getActionToTake(notification);
+		
+		assertEquals(expectedResult, result);
+	}
+	
+	@Test
+	public void testPresidentVeto_NotPresident() {
+		testPresidentVeto(Optional.empty());
+	}
+	
+	@Test
+	public void testPresidentVeto_LiberalAllFascist() {
+		testPresidentVeto_President(PartyMembership.LIBERAL, Arrays.asList(Policy.FASCIST, Policy.FASCIST), true);
+	}
+	
+	@Test
+	public void testPresidentVeto_LiberalAllLiberal() {
+		testPresidentVeto_President(PartyMembership.LIBERAL, Arrays.asList(Policy.LIBERAL, Policy.LIBERAL), false);
+	}
+	
+	@Test
+	public void testPresidentVeto_FascistAllFascist() {
+		testPresidentVeto_President(PartyMembership.FASCIST, Arrays.asList(Policy.FASCIST, Policy.FASCIST), false);
+	}
+	
+	@Test
+	public void testPresidentVeto_FascistAllLiberal() {
+		testPresidentVeto_President(PartyMembership.FASCIST, Arrays.asList(Policy.LIBERAL, Policy.LIBERAL), true);
+	}
+	
+	@Test
+	public void testPresidentVeto_Mixed() {
+		testPresidentVeto_President(PartyMembership.FASCIST, Arrays.asList(Policy.LIBERAL, Policy.FASCIST), false);
+	}
+	
+	private void testPresidentVeto_President(PartyMembership membership, List<Policy> policies, boolean concur) {
+		myPlayer.setPresident(true);
+		myPlayer.setPartyMembership(membership);
+		gameData.setPoliciesToView(policies);
+		String[] args = {Boolean.toString(concur)};
+		
+		testPresidentVeto(Optional.of(new GameplayAction(Action.PRESIDENT_VETO, args)));
+	}
+	
+	protected void testPresidentVeto(Optional<GameplayAction> expectedResult) {
+		gameData.setPhase(GamePhase.VETO);
+		
+		Optional<GameplayAction> result = processor.getActionToTake(notification);
+		
+		assertEquals(expectedResult, result);
+	}
+	
+	@Test
+	public void testInvestigate_NotPresident() {
+		testInvestigate(Optional.empty());
+	}
+	
+	@Test
+	public void testInvestigate_WithUnknown() {
+		when(randomUtil.getRandomItemFromList(Arrays.asList(unknown, unknown2))).thenReturn(unknown2);
+		
+		testInvestigate_President(PartyMembership.FASCIST, Arrays.asList(liberal, unknown, myPlayer, fascist, deadPlayer, fascist2, liberal2, unknown2), "Unknown2");
+	
+		verify(randomUtil).getRandomItemFromList(Arrays.asList(unknown, unknown2));
+	}
+	
+	@Test
+	public void testInvestigate_AllKNown() {
+		when(randomUtil.getRandomItemFromList(Arrays.asList(liberal, fascist, fascist2, liberal2))).thenReturn(fascist);
+		
+		testInvestigate_President(PartyMembership.FASCIST, Arrays.asList(liberal, myPlayer, fascist, deadPlayer, fascist2, liberal2), "Fascist");
+	
+		verify(randomUtil).getRandomItemFromList(Arrays.asList(liberal, fascist, fascist2, liberal2));
+	}
+	
+	protected void testInvestigate_President(PartyMembership membership, List<PlayerData> players, String expectedPlayerForInvestigation) {
+		myPlayer.setPresident(true);
+		myPlayer.setPartyMembership(membership);
+		gameData.setPlayers(players);
+		String[] args = {expectedPlayerForInvestigation};
+		
+		testInvestigate(Optional.of(new GameplayAction(Action.INVESTIGATE_PLAYER, args)));
+	}
+	
+	private void testInvestigate(Optional<GameplayAction> expectedResult) {
+		gameData.setPhase(GamePhase.INVESTIGATE);
+		
+		Optional<GameplayAction> result = processor.getActionToTake(notification);
+		
+		assertEquals(expectedResult, result);
+	}
+	
+	@Test
+	public void testChooseNextPresidentialCandidate_NotPresident() {
+		testChooseNextPresidentialCandidate(Optional.empty());
+	}
+	
+	@Test
+	public void testChooseNextPresidentialCandidate_LiberalWithLiberals() {
+		when(randomUtil.getRandomItemFromList(Arrays.asList(liberal, liberal2))).thenReturn(liberal2);
+		
+		testChooseNextPresidentialCandidate_President(PartyMembership.LIBERAL, Arrays.asList(fascist, unknown, deadPlayer, myPlayer, fascist2, liberal, unknown2, liberal2), 7);
+	
+		verify(randomUtil).getRandomItemFromList(Arrays.asList(liberal, liberal2));
+	}
+	
+	@Test
+	public void testChooseNextPresidentialCandidate_FascistWithFascists() {
+		when(randomUtil.getRandomItemFromList(Arrays.asList(fascist, fascist2))).thenReturn(fascist);
+		
+		testChooseNextPresidentialCandidate_President(PartyMembership.FASCIST, Arrays.asList(fascist, unknown, deadPlayer, myPlayer, fascist2, liberal, unknown2, liberal2), 0);
+	
+		verify(randomUtil).getRandomItemFromList(Arrays.asList(fascist, fascist2));
+	}
+	
+	@Test
+	public void testChooseNextPresidentialCandidate_Unknowns() {
+		when(randomUtil.getRandomItemFromList(Arrays.asList(unknown, unknown2))).thenReturn(unknown2);
+		
+		testChooseNextPresidentialCandidate_President(PartyMembership.LIBERAL, Arrays.asList(unknown, deadPlayer, myPlayer, unknown2), 3);
+	
+		verify(randomUtil).getRandomItemFromList(Arrays.asList(unknown, unknown2));
+	}
+	
+	protected void testChooseNextPresidentialCandidate_President(PartyMembership membership, List<PlayerData> players, int expectedIndex) {
+		myPlayer.setPresident(true);
+		myPlayer.setPartyMembership(membership);
+		gameData.setPlayers(players);
+		String[] args = {Integer.toString(expectedIndex)};
+		
+		testChooseNextPresidentialCandidate(Optional.of(new GameplayAction(Action.CHOOSE_NEXT_PRESIDENTIAL_CANDIDATE, args)));
+	}
+	
+	protected void testChooseNextPresidentialCandidate(Optional<GameplayAction> expectedResult) {
+		gameData.setPhase(GamePhase.SPECIAL_ELECTION);
 		
 		Optional<GameplayAction> result = processor.getActionToTake(notification);
 		
