@@ -108,12 +108,12 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 				return hitler.get();
 			}
 		}
-		
-		List<PlayerData> preferredPlayers = getPreferredPlayers(myPlayer.getPartyMembership(), eligiblePlayers);
+		PartyMembership myMembership = myPlayer.getPartyMembership();
+		List<PlayerData> preferredPlayers = getPreferredPlayers(myMembership, eligiblePlayers, myPlayer.getSecretRole(), PartyMembership.FASCIST == myMembership);
 		return randomUtil.getRandomItemFromList(preferredPlayers);
 	}
 	
-	protected List<PlayerData> getPreferredPlayers(PartyMembership myMembership, List<PlayerData> eligiblePlayers) {
+	protected List<PlayerData> getPreferredPlayers(PartyMembership myMembership, List<PlayerData> eligiblePlayers, SecretRole myRole, boolean hitlerPreferred) {
 		List<PlayerData> playersOnMyTeam = eligiblePlayers.stream()
 				.filter(player -> myMembership == player.getPartyMembership())
 				.collect(Collectors.toList());
@@ -209,7 +209,8 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 				.filter(Predicates.not(myPlayer::equals))
 				.filter(PlayerData::isAlive)
 				.collect(Collectors.toList());
-		List<PlayerData> preferredPlayers = getPreferredPlayers(getOppositeMembership(myPlayer.getPartyMembership()), eligiblePlayers);
+		PartyMembership myMembership = myPlayer.getPartyMembership();
+		List<PlayerData> preferredPlayers = getPreferredPlayers(getOppositeMembership(myMembership), eligiblePlayers, myPlayer.getSecretRole(), PartyMembership.LIBERAL == myMembership);
 		PlayerData playerToKill = randomUtil.getRandomItemFromList(preferredPlayers);
 		String[] args = {String.valueOf(playerToKill.getUsername())};
 		LOGGER.info(() -> String.format("%s is killing %s", username, playerToKill.getUsername()));
@@ -268,7 +269,8 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 				.filter(player -> !myPlayer.equals(player))
 				.filter(PlayerData::isAlive)
 				.collect(Collectors.toList());
-		List<PlayerData> preferredPlayers = getPreferredPlayers(myPlayer.getPartyMembership(), eligiblePlayers);
+		PartyMembership myMembership = myPlayer.getPartyMembership();
+		List<PlayerData> preferredPlayers = getPreferredPlayers(myMembership, eligiblePlayers, myPlayer.getSecretRole(), PartyMembership.LIBERAL == myMembership);
 		PlayerData nextCandidate = randomUtil.getRandomItemFromList(preferredPlayers);
 		String[] args = {Integer.toString(allPlayers.indexOf(nextCandidate))};
 		return Optional.of(new GameplayAction(Action.CHOOSE_NEXT_PRESIDENTIAL_CANDIDATE, args));

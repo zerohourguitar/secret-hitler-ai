@@ -45,6 +45,8 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 			.put(PartyMembership.LIBERAL, 3)
 			.build();
 	
+	private static final Set<SecretRole> KNOWN_NON_HITLER_ROLES = ImmutableSet.of(SecretRole.FASCIST, SecretRole.LIBERAL);
+	
 	protected static boolean playerKnowsRoles(SecretRole myRole, int numberOfPlayers) {
 		return SecretRole.FASCIST == myRole || (SecretRole.HITLER == myRole && numberOfPlayers < 7);
 	}
@@ -71,13 +73,14 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 	private final Map<Action, Consumer<ParticipantGameNotification>> actionToDeduceMap;
 	
 	private Map<String, PartyMembership> suspectedMemberships = new HashMap<>();
-	
+	protected Set<String> provenNonHitlers = new HashSet<>();
 	protected boolean policyOptionForNextGovernment = true;
 	protected Optional<String> vetoRequestor = Optional.empty();
 
 	public BooleanDecisionGameplayProcessor(final String username, final RandomUtil randomUtil) {
 		super(username, randomUtil);
 		actionToDeduceMap = ImmutableMap.<Action, Consumer<ParticipantGameNotification>>builder()
+				.put(Action.SHUSH, this::governmentElectedDeducer)
 				.put(Action.DENIED, this::governmentDeniedDeducer)
 				.put(Action.ANARCHY, this::anarchyDeducer)
 				.put(Action.FASCIST_POLICY, this::fascistPolicyDeducer)
@@ -109,6 +112,26 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 			actionToDeduceMap.getOrDefault(notification.getAction().getAction(), data -> {}).accept(notification);
 		}
 		return super.getActionToTake(notification);
+	}
+	
+	@Override
+	protected List<PlayerData> getPreferredPlayers(PartyMembership myMembership, List<PlayerData> eligiblePlayers, SecretRole myRole, boolean hitlerPreferred) {
+		List<PlayerData> preferredPlayers = super.getPreferredPlayers(myMembership, eligiblePlayers, myRole, hitlerPreferred);
+		if (SecretRole.HITLER == myRole) {
+			return preferredPlayers;
+		}
+		List<PlayerData> withHitlerPreference = preferredPlayers.stream()
+				.filter(player -> hitlerPreferred ? SecretRole.HITLER == player.getSecretRole() : KNOWN_NON_HITLER_ROLES.contains(player.getSecretRole()))
+				.collect(Collectors.toList());
+		if (withHitlerPreference.isEmpty()) {
+			withHitlerPreference = preferredPlayers.stream()
+					.filter(player -> hitlerPreferred != provenNonHitlers.contains(player.getUsername()))
+					.collect(Collectors.toList());
+		}
+		if (withHitlerPreference.isEmpty()) {
+			return preferredPlayers;
+		}
+		return withHitlerPreference;
 	}
 	
 	@Override
@@ -159,6 +182,16 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 			}
 		}
 		return suspectedMembership;
+	}
+	
+	protected void governmentElectedDeducer(final ParticipantGameNotification notification) {
+		final GameData gameData = notification.getGameData();
+		if(gameData.isFascistDangerZone()) {
+			gameData.getPlayers().stream()
+					.filter(PlayerData::isChancellor)
+					.map(PlayerData::getUsername)
+					.forEach(provenNonHitlers::add);
+		}
 	}
 	
 	protected void governmentDeniedDeducer(final ParticipantGameNotification notification) {

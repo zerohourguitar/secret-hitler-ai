@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -630,6 +631,19 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 	}
 	
 	@Test
+	public void testChooseNextPresidentialCandidate_FascistWithHitler() {
+		aj.setPartyMembership(PartyMembership.FASCIST);
+		aj.setSecretRole(SecretRole.HITLER);
+		sean.setPartyMembership(PartyMembership.FASCIST);
+		sean.setSecretRole(SecretRole.FASCIST);
+		when(randomUtil.getRandomItemFromList(Arrays.asList(sean))).thenReturn(sean);
+		
+		testChooseNextPresidentialCandidate_President(PartyMembership.FASCIST, Arrays.asList(aj, sean), 1);
+	
+		verify(randomUtil).getRandomItemFromList(Arrays.asList(sean));
+	}
+	
+	@Test
 	public void testChancellorVetoed() {
 		String[] args = {"Sean"};
 		notification.setAction(new GameplayAction(Action.CHANCELLOR_VETO, args));
@@ -722,6 +736,30 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 		String[] args = {"AJ"};
 		notification.setAction(new GameplayAction(Action.PRESIDENT_VETO_YES, args));
 		gameData.setPlayers(Arrays.asList(aj, sean));
+		
+		processor.getActionToTake(notification);
+	}
+	
+	@Test
+	public void testGovernmentElected_NonDangerZone() {
+		testGovernmentElected();
+		
+		assertEquals("There are no proven non-hitlers", Collections.emptySet(), boolProcessor.provenNonHitlers);
+	}
+	
+	@Test
+	public void testGovernmentElected_DangerZone() {
+		gameData.setFascistDangerZone(true);
+		testGovernmentElected();
+		
+		assertEquals("Sean is a proven non-hitler", new HashSet<>(Arrays.asList(sean.getUsername())), boolProcessor.provenNonHitlers);
+	}
+	
+	private void testGovernmentElected() {
+		sean.setChancellor(true);
+		gameData.setPlayers(Arrays.asList(sean, aj));
+		String[] args = {};
+		notification.setAction(new GameplayAction(Action.SHUSH, args));
 		
 		processor.getActionToTake(notification);
 	}
