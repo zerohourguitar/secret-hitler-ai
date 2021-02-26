@@ -5,6 +5,7 @@ import static com.google.common.base.Predicates.not;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -47,6 +48,8 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 	protected static PartyMembership getOppositeMembership(final PartyMembership membership) {
 		return OPPOSITE_MEMBERSHIP_MAP.get(membership);
 	}
+	
+	protected static final Set<SecretRole> KNOWN_NON_HITLER_ROLES = ImmutableSet.of(SecretRole.FASCIST, SecretRole.LIBERAL);
 	
 	private final RandomUtil randomUtil;
 	private final Map<GamePhase, Function<GameData, Optional<GameplayAction>>> phaseToFunctionMap;
@@ -100,20 +103,26 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 	
 	protected PlayerData chooseRunningMate(final GameData gameData, List<PlayerData> eligiblePlayers) {
 		final PlayerData myPlayer = gameData.getMyPlayer();
-		if (SecretRole.FASCIST == myPlayer.getSecretRole()) {
-			Optional<PlayerData> hitler = eligiblePlayers.stream()
-					.filter(player -> SecretRole.HITLER == player.getSecretRole())
-					.findAny();
-			if (hitler.isPresent()) {
-				return hitler.get();
-			}
-		}
 		PartyMembership myMembership = myPlayer.getPartyMembership();
 		List<PlayerData> preferredPlayers = getPreferredPlayers(myMembership, eligiblePlayers, myPlayer.getSecretRole(), PartyMembership.FASCIST == myMembership);
 		return randomUtil.getRandomItemFromList(preferredPlayers);
 	}
 	
 	protected List<PlayerData> getPreferredPlayers(PartyMembership myMembership, List<PlayerData> eligiblePlayers, SecretRole myRole, boolean hitlerPreferred) {
+		List<PlayerData> preferredPlayers = getPreferredPlayers(myMembership, eligiblePlayers);
+		if (SecretRole.HITLER == myRole) {
+			return preferredPlayers;
+		}
+		List<PlayerData> withHitlerPreference = preferredPlayers.stream()
+				.filter(player -> hitlerPreferred ? SecretRole.HITLER == player.getSecretRole() : KNOWN_NON_HITLER_ROLES.contains(player.getSecretRole()))
+				.collect(Collectors.toList());
+		if (CollectionUtils.isNotEmpty(withHitlerPreference)) {
+			return withHitlerPreference;
+		}
+		return getMostLikelyHitlerPreference(preferredPlayers, hitlerPreferred);
+	}
+	
+	protected List<PlayerData> getPreferredPlayers(PartyMembership myMembership, List<PlayerData> eligiblePlayers) {
 		List<PlayerData> playersOnMyTeam = eligiblePlayers.stream()
 				.filter(player -> myMembership == player.getPartyMembership())
 				.collect(Collectors.toList());
@@ -131,6 +140,10 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 	}
 	
 	protected List<PlayerData> getMostLikelyPartyMembers(final List<PlayerData> players, final PartyMembership myMembership) {
+		return players;
+	}
+	
+	protected List<PlayerData> getMostLikelyHitlerPreference(final List<PlayerData> players, final boolean hitlerPreferred) {
 		return players;
 	}
 	

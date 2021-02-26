@@ -14,6 +14,8 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.apache.commons.collections4.CollectionUtils;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.secrethitler.ai.dtos.GameData;
@@ -44,8 +46,6 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 			.put(PartyMembership.UNKNOWN, 2)
 			.put(PartyMembership.LIBERAL, 3)
 			.build();
-	
-	private static final Set<SecretRole> KNOWN_NON_HITLER_ROLES = ImmutableSet.of(SecretRole.FASCIST, SecretRole.LIBERAL);
 	
 	protected static boolean playerKnowsRoles(SecretRole myRole, int numberOfPlayers) {
 		return SecretRole.FASCIST == myRole || (SecretRole.HITLER == myRole && numberOfPlayers < 7);
@@ -115,23 +115,14 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 	}
 	
 	@Override
-	protected List<PlayerData> getPreferredPlayers(PartyMembership myMembership, List<PlayerData> eligiblePlayers, SecretRole myRole, boolean hitlerPreferred) {
-		List<PlayerData> preferredPlayers = super.getPreferredPlayers(myMembership, eligiblePlayers, myRole, hitlerPreferred);
-		if (SecretRole.HITLER == myRole) {
-			return preferredPlayers;
-		}
-		List<PlayerData> withHitlerPreference = preferredPlayers.stream()
-				.filter(player -> hitlerPreferred ? SecretRole.HITLER == player.getSecretRole() : KNOWN_NON_HITLER_ROLES.contains(player.getSecretRole()))
+	protected List<PlayerData> getMostLikelyHitlerPreference(List<PlayerData> players, boolean hitlerPreferred) {
+		List<PlayerData> withHitlerPreference = players.stream()
+				.filter(player -> hitlerPreferred != provenNonHitlers.contains(player.getUsername()))
 				.collect(Collectors.toList());
-		if (withHitlerPreference.isEmpty()) {
-			withHitlerPreference = preferredPlayers.stream()
-					.filter(player -> hitlerPreferred != provenNonHitlers.contains(player.getUsername()))
-					.collect(Collectors.toList());
+		if (CollectionUtils.isNotEmpty(withHitlerPreference)) {
+			return withHitlerPreference;
 		}
-		if (withHitlerPreference.isEmpty()) {
-			return preferredPlayers;
-		}
-		return withHitlerPreference;
+		return players;
 	}
 	
 	@Override

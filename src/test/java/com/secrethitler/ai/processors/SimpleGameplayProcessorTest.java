@@ -63,6 +63,7 @@ public class SimpleGameplayProcessorTest {
 		deadPlayer = new PlayerData();
 		hitler = new PlayerData();
 		hitler.setAlive(true);
+		hitler.setPartyMembership(PartyMembership.FASCIST);
 		hitler.setSecretRole(SecretRole.HITLER);
 		fascist = new PlayerData();
 		fascist.setUsername("Fascist");
@@ -113,11 +114,15 @@ public class SimpleGameplayProcessorTest {
 	@Test
 	public void testChooseRunningMate_FascistPresidentWithHitler() {
 		myPlayer.setPresident(true);
+		myPlayer.setPartyMembership(PartyMembership.FASCIST);
 		myPlayer.setSecretRole(SecretRole.FASCIST);
 		gameData.setPlayers(Arrays.asList(previousGovernmentMember, deadPlayer, myPlayer, hitler, liberal, fascist));
 		String[] args = {"3"};
+		when(randomUtil.getRandomItemFromList(Arrays.asList(hitler))).thenReturn(hitler);
 		
 		testChooseRunningMate(Optional.of(new GameplayAction(Action.CHOOSE_RUNNING_MATE, args)));
+	
+		verify(randomUtil).getRandomItemFromList(Arrays.asList(hitler));
 	}
 	
 	@Test
