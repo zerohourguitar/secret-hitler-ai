@@ -101,8 +101,11 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 			throw new IllegalArgumentException("Tried to set a suspected membership of a player that is known to be incorrect!");
 		}
 		final String suspectUsername = player.getUsername();
-		LOGGER.info(() -> String.format("%s suspects %s of being a %s", username, suspectUsername, membership.name()));
 		suspectedMemberships.put(suspectUsername, membership);
+	}
+	
+	private void printSuspectedPlayerMatrix(final String action) {
+		LOGGER.info(() -> String.format("%s's suspected player matrix after %s: %n%s", username, action, suspectedMemberships.toString()));
 	}
 
 	@Override
@@ -141,6 +144,7 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 		if (!playerKnowsRoles(myRole, numberOfPlayers)) {
 			List<PlayerData> government = governmentStream.collect(Collectors.toList());
 			PartyMembership suspectedMembership = updateSuspectedMembershipForChosenTeam(government);
+			printSuspectedPlayerMatrix("running mate was chosen");
 			
 			return ImmutableSet.of(PartyMembership.UNKNOWN, myMembership).contains(suspectedMembership);
 		}
@@ -197,6 +201,7 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 							myMembership : getOppositeMembership(myMembership);
 					setSuspectedMembership(player, suspectedMembership);
 				});
+		printSuspectedPlayerMatrix("government was denied");
 	}
 	
 	protected void anarchyDeducer(final ParticipantGameNotification notification) {
@@ -226,6 +231,7 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 							setSuspectedMembership(player, getSuspectedMembershipFromPolicy(policyVotedFor));
 						}
 					});
+			printSuspectedPlayerMatrix(String.format("%s policy was inacted", policy.name()));
 		}
 		policyOptionForNextGovernment = true;
 		vetoRequestor = Optional.empty();
@@ -257,6 +263,7 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 			return;
 		}
 		setSuspectedMembership(killer, getOppositeMembership(suspectedVictimParty));
+		printSuspectedPlayerMatrix(String.format("%s killed %s", killer, victimName));
 	}
 	
 	@Override
@@ -270,6 +277,7 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 					.filter(chancellor -> PartyMembership.UNKNOWN == chancellor.getPartyMembership())
 					.forEach(chancellor -> setSuspectedMembership(chancellor, concur ? 
 							membership : getOppositeMembership(membership)));
+			printSuspectedPlayerMatrix("chancellor asked to veto the policies");
 		}
 		return concur;
 	}
@@ -291,6 +299,7 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 				Stream.of(notification.getAction().getArgs())
 						.map(username -> getPlayerByUsername(notification.getGameData().getPlayers(), username))
 						.collect(Collectors.toList()));
+		printSuspectedPlayerMatrix("special election was chosen");
 	}
 	
 	protected void chancellorVetoDeducer(final ParticipantGameNotification notification) {
@@ -307,6 +316,7 @@ public class BooleanDecisionGameplayProcessor extends SimpleGameplayProcessor {
 		updateSuspectedMembershipForChosenTeam(Arrays.asList(
 				getPlayerByUsername(players, presidentName), 
 				getPlayerByUsername(players, vetoRequestor.orElse(null))));
+		printSuspectedPlayerMatrix("policies were vetoed");
 	}
 	
 }

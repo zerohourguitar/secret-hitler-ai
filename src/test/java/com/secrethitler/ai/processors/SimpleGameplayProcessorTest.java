@@ -112,17 +112,27 @@ public class SimpleGameplayProcessorTest {
 	}
 	
 	@Test
-	public void testChooseRunningMate_FascistPresidentWithHitler() {
+	public void testChooseRunningMate_FascistPresidentWithHitlerDangerZone() {
+		testChooseRunningMate_FascistPresidentWithHitler(true, 3, hitler);
+	}
+	
+	@Test
+	public void testChooseRunningMate_FascistPresidentWithHitlerNotDangerZone() {
+		testChooseRunningMate_FascistPresidentWithHitler(false, 5, fascist);
+	}
+	
+	private void testChooseRunningMate_FascistPresidentWithHitler(final boolean dangerZone, final int expectedIndex, final PlayerData expectedChosenPlayer) {
 		myPlayer.setPresident(true);
 		myPlayer.setPartyMembership(PartyMembership.FASCIST);
 		myPlayer.setSecretRole(SecretRole.FASCIST);
+		gameData.setFascistDangerZone(dangerZone);
 		gameData.setPlayers(Arrays.asList(previousGovernmentMember, deadPlayer, myPlayer, hitler, liberal, fascist));
-		String[] args = {"3"};
-		when(randomUtil.getRandomItemFromList(Arrays.asList(hitler))).thenReturn(hitler);
+		String[] args = {Integer.toString(expectedIndex)};
+		when(randomUtil.getRandomItemFromList(Arrays.asList(expectedChosenPlayer))).thenReturn(expectedChosenPlayer);
 		
 		testChooseRunningMate(Optional.of(new GameplayAction(Action.CHOOSE_RUNNING_MATE, args)));
 	
-		verify(randomUtil).getRandomItemFromList(Arrays.asList(hitler));
+		verify(randomUtil).getRandomItemFromList(Arrays.asList(expectedChosenPlayer));
 	}
 	
 	@Test

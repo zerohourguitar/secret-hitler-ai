@@ -104,7 +104,7 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 	protected PlayerData chooseRunningMate(final GameData gameData, List<PlayerData> eligiblePlayers) {
 		final PlayerData myPlayer = gameData.getMyPlayer();
 		PartyMembership myMembership = myPlayer.getPartyMembership();
-		List<PlayerData> preferredPlayers = getPreferredPlayers(myMembership, eligiblePlayers, myPlayer.getSecretRole(), PartyMembership.FASCIST == myMembership);
+		List<PlayerData> preferredPlayers = getPreferredPlayers(myMembership, eligiblePlayers, myPlayer.getSecretRole(), PartyMembership.FASCIST == myMembership && gameData.isFascistDangerZone());
 		return randomUtil.getRandomItemFromList(preferredPlayers);
 	}
 	
