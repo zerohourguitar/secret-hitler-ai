@@ -5,58 +5,56 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Scanner;
+import java.util.function.Function;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.secrethitler.ai.dtos.LoginRequest;
 import com.secrethitler.ai.dtos.LoginResponse;
+import com.secrethitler.ai.utils.UrlWrapper;
 import com.secrethitler.ai.websockets.GameSetupWebsocketClientEndpoint;
 
 public class SecretHitlerAi {
 	private static final Logger LOGGER = Logger.getLogger(SecretHitlerAi.class.getName());
 	private static final Scanner SCANNER = new Scanner(System.in);
-	private static final Properties PROP = new Properties();
 	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 	private static final ObjectWriter OBJECT_WRITER = OBJECT_MAPPER.writer().withDefaultPrettyPrinter();
 	private static final String PROPERTIES_FILE_NAME = "application.properties";
-	private static final String NEW_GAME_COMMAND = "newGame";
-	private static final String EMPTY_PAYLOAD = "{}";
-	
-	private static boolean secureUrl;
-	private static String baseUrlString;
-	
-	public static void main(String[] args) throws IOException, InterruptedException, URISyntaxException {
-		final String originalGameId = args[0];
-		boolean newGame = NEW_GAME_COMMAND.equals(originalGameId);
-		LOGGER.info(() -> getStartupLogMessage(newGame, originalGameId, args.length - 1));
-		
-		ClassLoader loader = Thread.currentThread().getContextClassLoader();           
-		PROP.load(loader.getResourceAsStream(PROPERTIES_FILE_NAME));
-		secureUrl = Boolean.getBoolean(PROP.getProperty("secrethitler.secureurl"));
-		baseUrlString = PROP.getProperty("secrethitler.url");
-		final String robotPassword = PROP.getProperty("secrethitler.login.robotpassword");
-		
-		String gameId = originalGameId;
-		for (int idx=1; idx < args.length; idx++) {
-			String username = String.format("Robot %d", idx);
-			String accessToken = getAuthenticatedAccessToken(username, robotPassword);
-			LOGGER.info(() -> String.format("Logged in user %s", username));
-			boolean host = false;
-			if (idx == 1 && newGame) {
-				host = true;
-				final String newGameId = createNewGame(accessToken);
-				LOGGER.info(() -> String.format("New game created with id: %s", newGameId));
-				gameId = newGameId;
-			}
-			new GameSetupWebsocketClientEndpoint(gameId, accessToken, Integer.valueOf(args[idx]), username, host);
+	protected static final Function<String, UrlWrapper> GET_URL_FUNCTION = urlString -> {
+		try {
+			return new UrlWrapper(urlString);
+		} catch (MalformedURLException e) {
+			throw new IllegalArgumentException("Bad URL", e);
 		}
+	};
+	protected static final Function<GameSetupWebsocketClientEndpoint.Builder, GameSetupWebsocketClientEndpoint> GAME_SETUP_CLIENT_BUILD_FUNCTION = builder -> {
+		try {
+			return builder.build();
+		} catch (URISyntaxException e) {
+			throw new IllegalArgumentException("Bad URI", e);
+		}
+	};
+	protected static final String NEW_GAME_COMMAND = "newGame";
+	protected static final String EMPTY_PAYLOAD = "{}"; 
+	
+	public static void main(String[] args) throws Exception {
+		final String originalGameId = args[0];
+		List<Integer> aiDifficulties = IntStream.range(1, args.length).boxed()
+				.map(index -> args[index])
+				.map(Integer::parseInt)
+				.collect(Collectors.toList());
+		
+		new SecretHitlerAi(PROPERTIES_FILE_NAME, GET_URL_FUNCTION, GAME_SETUP_CLIENT_BUILD_FUNCTION, originalGameId, aiDifficulties);
 		
 		Thread.currentThread().join();
 	}
@@ -67,23 +65,79 @@ public class SecretHitlerAi {
 		} 
 		return String.format("Starting Secret Hitler AI for %d users with gameId %s.", totalUsers, gameId);
 	}
+	
+	public static Scanner getScanner() {
+		return SCANNER;
+	}
+	
+	public static ObjectMapper getObjectMapper() {
+		return OBJECT_MAPPER;
+	}
 
-	private static String getAuthenticatedAccessToken(final String username, final String password) throws IOException {
+	public static ObjectWriter getObjectWriter() {
+		return OBJECT_WRITER;
+	}
+
+	private final Properties prop;
+	private final Function<String, UrlWrapper> getUrlFunction;
+	private final boolean secureUrl;
+	private final String baseUrlString;
+
+	public SecretHitlerAi(final String propertiesFileName, final Function<String, UrlWrapper> getUrlFunction, 
+			Function<GameSetupWebsocketClientEndpoint.Builder, GameSetupWebsocketClientEndpoint> gameSetupClientBuildFunction, 
+			final String originalGameId, final List<Integer> aiDifficulties) throws Exception {
+		ClassLoader loader = Thread.currentThread().getContextClassLoader(); 
+		boolean newGame = NEW_GAME_COMMAND.equals(originalGameId);
+		LOGGER.info(() -> getStartupLogMessage(newGame, originalGameId, aiDifficulties.size()));
+		prop = new Properties();
+		prop.load(loader.getResourceAsStream(propertiesFileName));
+		secureUrl = Boolean.valueOf(prop.getProperty("secrethitler.secureurl"));
+		baseUrlString = prop.getProperty("secrethitler.url");
+		final String robotPassword = prop.getProperty("secrethitler.login.robotpassword");
+		this.getUrlFunction = getUrlFunction;
+		
+		String gameId = originalGameId;
+		int idx = 1;
+		for (int difficulty : aiDifficulties) {
+			String username = String.format("Robot %d", idx);
+			String accessToken = getAuthenticatedAccessToken(username, robotPassword);
+			LOGGER.info(() -> String.format("Logged in user %s", username));
+			boolean host = false;
+			if (idx == 1 && newGame) {
+				host = true;
+				final String newGameId = createNewGame(accessToken);
+				LOGGER.info(() -> String.format("New game created with id: %s", newGameId));
+				gameId = newGameId;
+			}
+			gameSetupClientBuildFunction.apply(
+					GameSetupWebsocketClientEndpoint.builder()
+							.withAi(this)
+							.withGameId(gameId)
+							.withAccessToken(accessToken)
+							.withGameplayLevel(difficulty)
+							.withUsername(username)
+							.withHost(host)
+			);
+			idx++;
+		}
+	}
+	
+	private String getAuthenticatedAccessToken(final String username, final String password) throws IOException {
 		final String json = OBJECT_WRITER.writeValueAsString(new LoginRequest(username, password));
 		LOGGER.fine(() -> String.format("Logging on with payload: %s", json));
-		final String loginUrlString = PROP.getProperty("secrethitler.login.url");
+		final String loginUrlString = prop.getProperty("secrethitler.login.url");
 		final String response = post(json, loginUrlString, Optional.empty());
 		LOGGER.fine(() -> String.format("Received login response: %s", response));
 		return OBJECT_MAPPER.readValue(response, LoginResponse.class).getAccessToken();
 	}
 	
-	private static String createNewGame(final String accessToken) throws IOException {
-		final String createGameUrlString = PROP.getProperty("secrethitler.creategame.url");
+	private String createNewGame(final String accessToken) throws IOException {
+		final String createGameUrlString = prop.getProperty("secrethitler.creategame.url");
 		return post(EMPTY_PAYLOAD, createGameUrlString, Optional.of(accessToken));
 	}
 	
-	private static String post(final String payload, final String urlString, final Optional<String> authorization) throws IOException {
-		final URL url = new URL(String.format("%s://%s%s", secureUrl ? "https" : "http", baseUrlString, urlString));
+	private String post(final String payload, final String urlString, final Optional<String> authorization) throws IOException {
+		final UrlWrapper url = getUrlFunction.apply(String.format("%s://%s%s", secureUrl ? "https" : "http", baseUrlString, urlString));
 		final HttpURLConnection con = (HttpURLConnection) url.openConnection();
 		con.setRequestMethod("POST");
 		con.setRequestProperty("Content-Type", "application/json; utf-8");
@@ -105,24 +159,16 @@ public class SecretHitlerAi {
 			return response.toString();
 		}
 	}
-	
-	public static Scanner getScanner() {
-		return SCANNER;
+
+	public Properties getProp() {
+		return prop;
 	}
 
-	public static Properties getProp() {
-		return PROP;
-	}
-	
-	public static boolean isSecureUrl() {
+	public boolean isSecureUrl() {
 		return secureUrl;
 	}
 
-	public static String getBaseUrlString() {
+	public String getBaseUrlString() {
 		return baseUrlString;
-	}
-
-	private SecretHitlerAi() {
-		super();
 	}
 }

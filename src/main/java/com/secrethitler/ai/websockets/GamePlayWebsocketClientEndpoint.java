@@ -11,8 +11,6 @@ import javax.websocket.ClientEndpoint;
 import javax.websocket.OnMessage;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
 import com.secrethitler.ai.SecretHitlerAi;
 import com.secrethitler.ai.dtos.GameData;
 import com.secrethitler.ai.dtos.GameplayAction;
@@ -25,10 +23,9 @@ import com.secrethitler.ai.processors.GameplayProcessorFactory;
 @ClientEndpoint
 public class GamePlayWebsocketClientEndpoint extends WebsocketClientEndpoint {
 	private static final Logger LOGGER = Logger.getLogger(GamePlayWebsocketClientEndpoint.class.getName());
-	private static final int MOVE_DELAY = Integer.parseInt(SecretHitlerAi.getProp().getProperty("secrethitler.ai.movedelay"));
-	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-	private static final ObjectWriter OBJECT_WRITER = OBJECT_MAPPER.writer().withDefaultPrettyPrinter();
 	
+	private final SecretHitlerAi ai;
+	private final int moveDelay;
 	private final String accessToken;
 	private final int level;
 	private final GameplayProcessor processor;
@@ -36,13 +33,15 @@ public class GamePlayWebsocketClientEndpoint extends WebsocketClientEndpoint {
 	
 	private GamePhase previousPhase = null;
 
-	public GamePlayWebsocketClientEndpoint(final String gameId, final String accessToken, final int level, final String username) throws InstantiationException, IllegalAccessException, URISyntaxException, InvocationTargetException, NoSuchMethodException {	
+	public GamePlayWebsocketClientEndpoint(final SecretHitlerAi ai, final String gameId, final String accessToken, final int level, final String username) throws InstantiationException, IllegalAccessException, URISyntaxException, InvocationTargetException, NoSuchMethodException {	
+		this.ai = ai;
+		this.moveDelay = Integer.parseInt(ai.getProp().getProperty("secrethitler.ai.movedelay"));
 		this.accessToken = accessToken;
 		this.level = level;
 		this.username = username;
 		processor = GameplayProcessorFactory.getGameplayProcessor(level, username);
-		final String gameSetupUrlString = String.format("%s://%s%s?gameId=%s&auth=%s", SecretHitlerAi.isSecureUrl() ? "wss" : "ws",
-				SecretHitlerAi.getBaseUrlString(), SecretHitlerAi.getProp().getProperty("secrethitler.gameplay.url"), 
+		final String gameSetupUrlString = String.format("%s://%s%s?gameId=%s&auth=%s", ai.isSecureUrl() ? "wss" : "ws",
+				ai.getBaseUrlString(), ai.getProp().getProperty("secrethitler.gameplay.url"), 
 				gameId, accessToken);
 		setupWebsocketClientEndpoint(new URI(gameSetupUrlString));
 	}
@@ -52,12 +51,12 @@ public class GamePlayWebsocketClientEndpoint extends WebsocketClientEndpoint {
 	public void onMessage(String message) {
 		LOGGER.fine(() -> String.format("Received Gameplay message: %s", message));
 		try {
-			ParticipantGameNotification gameNotification = OBJECT_MAPPER.readValue(message, ParticipantGameNotification.class);
+			ParticipantGameNotification gameNotification = SecretHitlerAi.getObjectMapper().readValue(message, ParticipantGameNotification.class);
 			GameData gameData = gameNotification.getGameData();
 			String nextGameId = gameData.getNextGameId();
 			if (nextGameId != null) {
 				LOGGER.info(() -> String.format("%s is joining the next game with id %s", username, nextGameId));
-				new GamePlayWebsocketClientEndpoint(nextGameId, accessToken, level, username);
+				new GamePlayWebsocketClientEndpoint(ai, nextGameId, accessToken, level, username);
 				userSession.close();
 				return;
 			}
@@ -86,7 +85,7 @@ public class GamePlayWebsocketClientEndpoint extends WebsocketClientEndpoint {
 
 	private void sendDelayedMessage(GameplayAction gameplayAction) {
 		try {
-			Thread.sleep(MOVE_DELAY);
+			Thread.sleep(moveDelay);
 		} catch (InterruptedException e) {
 			LOGGER.log(Level.SEVERE, "Exception when delaying the gameplay response message: %s", e);
 			Thread.currentThread().interrupt();
@@ -97,7 +96,7 @@ public class GamePlayWebsocketClientEndpoint extends WebsocketClientEndpoint {
 	
 	protected String gameplayActionToString(GameplayAction gameplayAction) {
 		try {
-			return OBJECT_WRITER.writeValueAsString(gameplayAction);
+			return SecretHitlerAi.getObjectWriter().writeValueAsString(gameplayAction);
 		} catch (JsonProcessingException e) {
 			LOGGER.log(Level.SEVERE, "Error parsing gameplay response message", e);
 		}
