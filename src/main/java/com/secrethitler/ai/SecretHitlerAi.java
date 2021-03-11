@@ -21,15 +21,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.secrethitler.ai.dtos.LoginRequest;
 import com.secrethitler.ai.dtos.LoginResponse;
+import com.secrethitler.ai.processors.GameplayProcessorFactory;
+import com.secrethitler.ai.processors.GameplayProcessorFactoryImpl;
 import com.secrethitler.ai.utils.UrlWrapper;
 import com.secrethitler.ai.websockets.GameSetupWebsocketClientEndpoint;
 
 public class SecretHitlerAi {
 	private static final Logger LOGGER = Logger.getLogger(SecretHitlerAi.class.getName());
-	private static final Scanner SCANNER = new Scanner(System.in);
 	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 	private static final ObjectWriter OBJECT_WRITER = OBJECT_MAPPER.writer().withDefaultPrettyPrinter();
 	private static final String PROPERTIES_FILE_NAME = "application.properties";
+	protected static final GameplayProcessorFactory GAMEPLAY_PROCESSOR_FACTORY = new GameplayProcessorFactoryImpl();
 	protected static final Function<String, UrlWrapper> GET_URL_FUNCTION = urlString -> {
 		try {
 			return new UrlWrapper(urlString);
@@ -47,6 +49,9 @@ public class SecretHitlerAi {
 	protected static final String NEW_GAME_COMMAND = "newGame";
 	protected static final String EMPTY_PAYLOAD = "{}"; 
 	
+	private static boolean gameStopped = false;
+	private static boolean gameOver = false;
+	
 	public static void main(String[] args) throws Exception {
 		final String originalGameId = args[0];
 		List<Integer> aiDifficulties = IntStream.range(1, args.length).boxed()
@@ -56,7 +61,9 @@ public class SecretHitlerAi {
 		
 		new SecretHitlerAi(PROPERTIES_FILE_NAME, GET_URL_FUNCTION, GAME_SETUP_CLIENT_BUILD_FUNCTION, originalGameId, aiDifficulties);
 		
-		Thread.currentThread().join();
+		while(!gameStopped) {
+			Thread.sleep(1000);
+		}
 	}
 	
 	private static String getStartupLogMessage(final boolean newGame, final String gameId, final int totalUsers) {
@@ -66,8 +73,12 @@ public class SecretHitlerAi {
 		return String.format("Starting Secret Hitler AI for %d users with gameId %s.", totalUsers, gameId);
 	}
 	
+	public static void stopGame() {
+		gameStopped = true;
+	}
+	
 	public static Scanner getScanner() {
-		return SCANNER;
+		return new Scanner(System.in);
 	}
 	
 	public static ObjectMapper getObjectMapper() {
@@ -76,6 +87,18 @@ public class SecretHitlerAi {
 
 	public static ObjectWriter getObjectWriter() {
 		return OBJECT_WRITER;
+	}
+	
+	public static GameplayProcessorFactory getGameplayProcessorFactory() {
+		return GAMEPLAY_PROCESSOR_FACTORY;
+	}
+
+	public static boolean isGameOver() {
+		return gameOver;
+	}
+	
+	public static void setGameOver(final boolean gameOver) {
+		SecretHitlerAi.gameOver = gameOver;
 	}
 
 	private final Properties prop;

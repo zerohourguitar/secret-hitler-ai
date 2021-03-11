@@ -1,63 +1,72 @@
 package com.secrethitler.ai;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-import java.net.URISyntaxException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
+import java.util.logging.StreamHandler;
 
 import org.junit.Test;
 
 import com.secrethitler.ai.websockets.GameSetupWebsocketClientEndpoint;
 
 public class SecretHitlerAiIntTest {
-	public class BadGameSetupClient extends GameSetupWebsocketClientEndpoint.Builder {
-		@Override
-		public GameSetupWebsocketClientEndpoint build() throws URISyntaxException {
-			throw new URISyntaxException("Input", "Reason");
-		}
-	}
+	private static final Logger LOGGER = Logger.getLogger(SecretHitlerAiIntTest.class.getName());
+	private static final int TIMEOUT_SECONDS = 120;
+	
 	@Test
 	public void testMain() throws Exception {
-		final String[] args = {"testGameId", "1", "2"};
-		ScheduledExecutorService executor = Executors.newScheduledThreadPool(1); 
-		SecretHitlerAi ai = null;
-		Future<?> future = executor.submit(() -> {
+		final String[] args = {"newGame", "1", "2", "1", "2", "1"};
+		PipedOutputStream userWriter = new PipedOutputStream();
+		PipedInputStream userIn = new PipedInputStream(userWriter);
+		System.setIn(userIn);
+		PipedInputStream gameSetupReader = new PipedInputStream();
+		PipedOutputStream systemOut = new PipedOutputStream(gameSetupReader);
+		Handler handler = new StreamHandler(systemOut, new SimpleFormatter());
+		handler.setLevel(Level.ALL);
+		Logger logger = Logger.getLogger(GameSetupWebsocketClientEndpoint.class.getName());
+		logger.setLevel(Level.ALL);
+		logger.setUseParentHandlers(false);
+		logger.addHandler(handler);
+		
+		Thread t = new Thread(() -> {
 			try {
 				SecretHitlerAi.main(args);
 			} catch (Exception e) {
 				throw new IllegalStateException(e);
 			}
 		});
-		try {
-		    future.get(5000, TimeUnit.MILLISECONDS);
-		} catch (TimeoutException e){
-		    future.cancel(true);
+		t.start();
+		try (BufferedReader systemReader = new BufferedReader(new InputStreamReader(gameSetupReader))) {
+			boolean gameStarted = false;
+			while (!gameStarted) {
+				final String out = systemReader.readLine();
+				LOGGER.info(out);
+				if ("INFO: Robot 5 joined the game session".equals(out)) {
+					Thread.sleep(500);
+					userWriter.write("\r\n".getBytes());
+					gameStarted = true;
+				}
+			}
 		}
-	}
-	
-	@Test
-	public void testBadUrl() {
-		try {
-			SecretHitlerAi.GET_URL_FUNCTION.apply("BAD_URL");
-			fail("Expected an IllegalArgumentException to be thrown if a bad url is given");
-		} catch (IllegalArgumentException e) {
-			assertEquals("Bad URL", e.getMessage());
-		}
-	}
-	
-	@Test
-	public void testBadUri() {
 		
-		try {
-			SecretHitlerAi.GAME_SETUP_CLIENT_BUILD_FUNCTION.apply(new BadGameSetupClient());
-			fail("Expected an IllegalArgumentException to be thrown if a bad uri is given");
-		} catch (IllegalArgumentException e) {
-			assertEquals("Bad URI", e.getMessage());
+		int secondsPassed = 0;
+		while (!SecretHitlerAi.isGameOver() && secondsPassed < TIMEOUT_SECONDS) {
+			Thread.sleep(1000);
+			secondsPassed++;
+		}
+		
+		SecretHitlerAi.stopGame();
+		t.join();
+		
+		if (secondsPassed >= TIMEOUT_SECONDS) {
+			fail(String.format("Game timed out after %d seconds", secondsPassed));
 		}
 	}
 }

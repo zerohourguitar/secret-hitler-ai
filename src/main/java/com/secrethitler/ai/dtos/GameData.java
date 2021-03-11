@@ -3,6 +3,10 @@ package com.secrethitler.ai.dtos;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.commons.lang3.builder.EqualsBuilder;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+
 import com.secrethitler.ai.enums.GamePhase;
 import com.secrethitler.ai.enums.PartyMembership;
 import com.secrethitler.ai.enums.Policy;
@@ -120,5 +124,20 @@ public class GameData {
 	}
 	public void setNextGameId(String nextGameId) {
 		this.nextGameId = nextGameId;
+	}
+	
+	@Override
+	public int hashCode() {
+		return HashCodeBuilder.reflectionHashCode(this);
+	}
+	
+	@Override
+	public boolean equals(Object obj) {
+		return EqualsBuilder.reflectionEquals(this, obj);
+	}
+	
+	@Override
+	public String toString() {
+		return ToStringBuilder.reflectionToString(this);
 	}
 }

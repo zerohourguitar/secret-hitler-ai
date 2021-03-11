@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -14,7 +15,11 @@ import java.net.HttpURLConnection;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -22,6 +27,7 @@ import org.mockito.junit.MockitoJUnitRunner;
 
 import com.secrethitler.ai.dtos.LoginRequest;
 import com.secrethitler.ai.dtos.LoginResponse;
+import com.secrethitler.ai.utils.BadGameSetupClientBuilder;
 import com.secrethitler.ai.utils.UrlWrapper;
 import com.secrethitler.ai.websockets.GameSetupWebsocketClientEndpoint;
 
@@ -50,6 +56,11 @@ public class SecretHitlerAiTest {
 	private HttpURLConnection createGameCon;
 	
 	private ByteArrayOutputStream loginOs;
+	
+	@Before
+	public void setUp() {
+		Logger.getLogger(SecretHitlerAi.class.getName()).setLevel(Level.FINE);
+	}
 	
 	@Test
 	public void testSecretHitlerAi_ExistingGame_NonSecure() throws Exception {
@@ -188,11 +199,43 @@ public class SecretHitlerAiTest {
 
 	@Test
 	public void testGetScanner() {
+		
 		assertNotNull(SecretHitlerAi.getScanner());
 	}
 	
 	@Test
 	public void testGetObjectMapper() {
 		assertNotNull(SecretHitlerAi.getObjectMapper());
+	}
+	
+	@Test
+	public void testGetGameplayProcessorFactory() {
+		assertEquals(SecretHitlerAi.GAMEPLAY_PROCESSOR_FACTORY, SecretHitlerAi.getGameplayProcessorFactory());
+	}
+	
+	@Test
+	public void testBadUrl() {
+		try {
+			SecretHitlerAi.GET_URL_FUNCTION.apply("BAD_URL");
+			fail("Expected an IllegalArgumentException to be thrown if a bad url is given");
+		} catch (IllegalArgumentException e) {
+			assertEquals("Bad URL", e.getMessage());
+		}
+	}
+	
+	@Test
+	public void testBadUri() {
+		
+		try {
+			SecretHitlerAi.GAME_SETUP_CLIENT_BUILD_FUNCTION.apply(new BadGameSetupClientBuilder());
+			fail("Expected an IllegalArgumentException to be thrown if a bad uri is given");
+		} catch (IllegalArgumentException e) {
+			assertEquals("Bad URI", e.getMessage());
+		}
+	}
+	
+	@After
+	public void tearDown() {
+		Logger.getLogger(SecretHitlerAi.class.getName()).setLevel(Level.INFO);
 	}
 }

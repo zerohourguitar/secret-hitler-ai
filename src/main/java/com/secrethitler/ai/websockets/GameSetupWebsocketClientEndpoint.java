@@ -1,9 +1,8 @@
 package com.secrethitler.ai.websockets;
 
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -12,26 +11,33 @@ import javax.websocket.OnMessage;
 import javax.websocket.OnOpen;
 import javax.websocket.Session;
 
-import org.apache.commons.lang3.builder.EqualsBuilder;
-import org.apache.commons.lang3.builder.HashCodeBuilder;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-
 import com.secrethitler.ai.SecretHitlerAi;
 import com.secrethitler.ai.dtos.GameRequest;
+import com.secrethitler.ai.utils.UriWrapper;
 
 @ClientEndpoint
 public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {	
 	private static final Logger LOGGER = Logger.getLogger(GameSetupWebsocketClientEndpoint.class.getName());
+	protected static final String GAME_SETUP_URL = "secrethitler.gamesetup.url";
+	protected static final Function<GamePlayWebsocketClientEndpoint.Builder, GamePlayWebsocketClientEndpoint> GAME_PLAY_CLIENT_BUILD_FUNCTION =
+			builder -> {
+				try {
+					return builder.build();
+				} catch (Exception e) {
+					throw new IllegalStateException(e);
+				}
+			};
 	
-	public static class Builder {
+	public static class Builder extends WebsocketClientEndpoint.Builder {
 		private SecretHitlerAi ai;
 		private String gameId;
 		private String accessToken;
 		private int gameplayLevel;
 		private String username;
 		private boolean host;
+		private Function<GamePlayWebsocketClientEndpoint.Builder, GamePlayWebsocketClientEndpoint> gamePlayClientBuildFunction = GAME_PLAY_CLIENT_BUILD_FUNCTION;
 		
-		public Builder() {
+		protected Builder() {
 			super();
 		}
 		
@@ -65,23 +71,24 @@ public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {
 			return this;
 		}
 		
+		public Builder withGamePlayClientBuildFunction(final Function<GamePlayWebsocketClientEndpoint.Builder, GamePlayWebsocketClientEndpoint> gamePlayClientBuildFunction) {
+			this.gamePlayClientBuildFunction = gamePlayClientBuildFunction;
+			return this;
+		}
+		
+		public Builder withUriBuilderFunction(final Function<String, UriWrapper> uriBuilderFunction) {
+			this.uriBuilderFunction = uriBuilderFunction;
+			return this;
+		}
+		
+		public Builder withUriConnectionConsumer(BiConsumer<WebsocketClientEndpoint, UriWrapper> uriConnectionConsumer) {
+			this.uriConnectionConsumer = uriConnectionConsumer;
+			return this;
+		}
+		
+		@Override
 		public GameSetupWebsocketClientEndpoint build() throws URISyntaxException {
 			return new GameSetupWebsocketClientEndpoint(this);
-		}
-		
-		@Override
-		public boolean equals(Object obj) {
-			return EqualsBuilder.reflectionEquals(this, obj);
-		}
-		
-		@Override
-		public int hashCode() {
-			return HashCodeBuilder.reflectionHashCode(this);
-		}
-		
-		@Override
-		public String toString() {
-			return ToStringBuilder.reflectionToString(this);
 		}
 	}
 	
@@ -95,25 +102,28 @@ public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {
 	private final int gameplayLevel;
 	private final String username;
 	private final boolean host;
+	private final Function<GamePlayWebsocketClientEndpoint.Builder, GamePlayWebsocketClientEndpoint> gamePlayClientBuildFunction;
 	
 	private GameSetupWebsocketClientEndpoint(Builder builder) throws URISyntaxException {
+		super(builder);
 		this.ai = builder.ai;
 		this.gameId = builder.gameId;
 		this.accessToken = builder.accessToken;
 		this.gameplayLevel = builder.gameplayLevel;
 		this.username = builder.username;
 		this.host = builder.host;
+		this.gamePlayClientBuildFunction = builder.gamePlayClientBuildFunction;
 		
 		final String gameSetupUrlString = String.format("%s://%s%s?gameId=%s&auth=%s", ai.isSecureUrl() ? "wss" : "ws",
-				ai.getBaseUrlString(), ai.getProp().getProperty("secrethitler.gamesetup.url"), 
+				ai.getBaseUrlString(), ai.getProp().getProperty(GAME_SETUP_URL), 
 				gameId, accessToken);
-		setupWebsocketClientEndpoint(new URI(gameSetupUrlString));
+		setupWebsocketClientEndpoint(builder.uriBuilderFunction.apply(gameSetupUrlString));
 	}
 
 	@OnOpen
 	@Override
     public void onOpen(Session userSession) {
-        this.userSession = userSession;
+        super.onOpen(userSession);
         if (host) {
         	Thread t = new Thread(() -> {
 	        	LOGGER.info("Press enter when you are ready to start the game");
@@ -136,10 +146,17 @@ public class GameSetupWebsocketClientEndpoint extends WebsocketClientEndpoint {
 			GameRequest gameRequest = SecretHitlerAi.getObjectMapper().readValue(message, GameRequest.class);
 			if (gameRequest.isStarted()) {
 				LOGGER.info(() -> String.format("%s is starting the game!", username));
-				new GamePlayWebsocketClientEndpoint(ai, gameId, accessToken, gameplayLevel, username);
+				gamePlayClientBuildFunction.apply(GamePlayWebsocketClientEndpoint.builder()
+						.withAi(ai)
+						.withGameId(gameId)
+						.withAccessToken(accessToken)
+						.withLevel(gameplayLevel)
+						.withUsername(username)
+						.withGameplayProcessorFactory(SecretHitlerAi.getGameplayProcessorFactory())
+						.withGamePlayClientBuildFunction(gamePlayClientBuildFunction));
 				userSession.close();
 			}
-		} catch (IOException | InstantiationException | IllegalAccessException | URISyntaxException | InvocationTargetException | NoSuchMethodException e) {
+		} catch (Exception e) {
 			LOGGER.log(Level.SEVERE, "Exception on a game setup message", e);
 		}
     }
