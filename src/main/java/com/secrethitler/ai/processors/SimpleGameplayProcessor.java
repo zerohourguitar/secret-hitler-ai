@@ -2,6 +2,7 @@ package com.secrethitler.ai.processors;
 
 import static com.google.common.base.Predicates.not;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -55,6 +56,7 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 	private final Map<GamePhase, Function<GameData, Optional<GameplayAction>>> phaseToFunctionMap;
 	protected final String username;
 	protected boolean vetoUsedThisTurn = false;
+	protected boolean chancellorHasChoice;
 	
 	public SimpleGameplayProcessor(final String username, final RandomUtil randomUtil) {
 		this.username = username;
@@ -174,7 +176,10 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		List<Policy> policies = gameData.getPoliciesToView();
 		int preferredIndex = policies.indexOf(preferredPolicyToDiscard);
 		int index = preferredIndex == -1 ? 0 : preferredIndex;
-		LOGGER.info(() -> String.format("%s is discarding %s policy", username, policies.get(index).name()));
+		Policy discardedPolicy = policies.get(index);
+		recordDiscardedPolicy(discardedPolicy);
+		policies.remove(index);
+		chancellorHasChoice = policies.get(0) != policies.get(1);
 		String[] args = {String.valueOf(index)};
 		return Optional.of(new GameplayAction(Action.PRESIDENT_CHOICE, args));
 	}
@@ -193,9 +198,14 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		List<Policy> policies = gameData.getPoliciesToView();
 		int preferredIndex = policies.indexOf(preferredPolicyToDiscard);
 		int index = preferredIndex == -1 ? 0 : preferredIndex;
-		LOGGER.info(() -> String.format("%s is discarding %s policy", username, policies.get(index).name()));
+		Policy discardedPolicy = policies.get(index);
+		recordDiscardedPolicy(discardedPolicy);
 		String[] args = {String.valueOf(index)};
 		return Optional.of(new GameplayAction(Action.CHANCELLOR_CHOICE, args));
+	}
+	
+	protected void recordDiscardedPolicy(Policy discardedPolicy) {
+		LOGGER.info(() -> String.format("%s is discarding %s policy", username, discardedPolicy.name()));
 	}
 	
 	protected Optional<GameplayAction> examine(final GameData gameData) {

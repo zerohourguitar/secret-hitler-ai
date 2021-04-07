@@ -1,5 +1,6 @@
 package com.secrethitler.ai.processors;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -76,8 +77,10 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 	private final Map<Action, Consumer<ParticipantGameNotification>> actionToDeduceMap;
 	
 	protected Set<String> provenNonHitlers = new HashSet<>();
-	protected boolean policyOptionForNextGovernment = true;
+	protected List<Policy> policyOptionsForNextGovernment = new ArrayList<>();
 	protected Optional<String> vetoRequestor = Optional.empty();
+	protected String previousPresident;
+	protected String previousChancellor;
 
 	public AbstractDeductionGameplayProcessor(final String username, final RandomUtil randomUtil) {
 		super(username, randomUtil);
@@ -192,7 +195,7 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 	}
 	
 	protected void anarchyDeducer(final ParticipantGameNotification notification) {
-		policyOptionForNextGovernment = true;
+		policyOptionsForNextGovernment = new ArrayList<>();
 		governmentDeniedDeducer(notification);
 	}
 	
@@ -205,13 +208,25 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 	}
 	
 	protected void policyPlayedDeducer(final ParticipantGameNotification notification, Policy policy) {
-		if (policyOptionForNextGovernment) {
-			notification.getGameData().getPlayers().stream()
+		GameData gameData = notification.getGameData();
+		Set<Policy> uniquePolicies = new HashSet<>(policyOptionsForNextGovernment);
+		if (uniquePolicies.size() != 1) {
+			gameData.getPlayers().stream()
 					.filter(PlayerData::isAlive)
 					.filter(player -> PartyMembership.UNKNOWN == player.getPartyMembership())
 					.forEach(player -> {
-						if (vetoRequestor.isPresent() && player.getUsername().equals(vetoRequestor.get())) {
-							updateSuspectedMembership(player, getSuspectedMembershipFromPolicy(getOppositePolicy(policy)), SuspicionAction.FAILED_VETO, notification.getGameData());
+						if (previousChancellor.equals(player.getUsername())) {
+							if (vetoRequestor.isPresent()) {
+								updateSuspectedMembership(player, getSuspectedMembershipFromPolicy(getOppositePolicy(policy)), SuspicionAction.FAILED_VETO, notification.getGameData());
+							} else {
+								updateSuspectedMembership(player, getSuspectedMembershipFromPolicy(policy), SuspicionAction.POLICY_PASSED_CHANCELLOR, notification.getGameData());
+							}
+						} else if (previousPresident.equals(player.getUsername())) {
+							if (vetoRequestor.isPresent()) {
+								updateSuspectedMembership(player, getSuspectedMembershipFromPolicy(policy), SuspicionAction.FAILED_VETO, notification.getGameData());
+							} else {
+								updateSuspectedMembership(player, getSuspectedMembershipFromPolicy(policy), SuspicionAction.POLICY_PASSED_PRESIDENT, notification.getGameData());
+							}
 						} else {
 							Policy policyVotedFor = Vote.JA == player.getVote() ?
 									policy : getOppositePolicy(policy);
@@ -220,14 +235,13 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 					});
 			printSuspectedPlayerMatrix(String.format("%s policy was inacted", policy.name()));
 		}
-		policyOptionForNextGovernment = true;
+		policyOptionsForNextGovernment = new ArrayList<>();
 		vetoRequestor = Optional.empty();
 	}
 	
 	@Override
 	protected void examinationHelper(final GameData gameData) {
-		Set<Policy> uniquePolicies = new HashSet<>(gameData.getPoliciesToView());
-		policyOptionForNextGovernment = uniquePolicies.size() != 1;
+		policyOptionsForNextGovernment = new ArrayList<>(gameData.getPoliciesToView());
 	}
 	
 	protected void playerKilledDeducer(final ParticipantGameNotification notification) {
@@ -267,6 +281,21 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 			printSuspectedPlayerMatrix("chancellor asked to veto the policies");
 		}
 		return concur;
+	}
+	
+	@Override
+	protected Optional<GameplayAction> makePresidentChoice(final GameData gameData) {
+		previousPresident = gameData.getPlayers().stream()
+				.filter(PlayerData::isPresident)
+				.map(PlayerData::getUsername)
+				.findAny()
+				.orElse(null);
+		previousChancellor = gameData.getPlayers().stream()
+				.filter(PlayerData::isChancellor)
+				.map(PlayerData::getUsername)
+				.findAny()
+				.orElse(null);
+		return super.makePresidentChoice(gameData);
 	}
 	
 	protected void specialElectionChosenDeducer(final ParticipantGameNotification notification) {
