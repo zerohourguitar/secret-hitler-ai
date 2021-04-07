@@ -13,7 +13,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.URISyntaxException;
 import java.util.Optional;
 import java.util.Properties;
-import java.util.Scanner;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.logging.Level;

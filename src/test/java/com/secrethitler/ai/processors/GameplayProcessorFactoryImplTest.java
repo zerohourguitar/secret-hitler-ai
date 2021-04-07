@@ -22,7 +22,13 @@ public class GameplayProcessorFactoryImplTest {
 	@Test
 	public void testGetGameplayProcessor_2() throws InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException {
 		GameplayProcessor processor = factory.getGameplayProcessor(2, USERNAME);
-		assertTrue(processor instanceof BooleanDecisionGameplayProcessor);
+		assertTrue(processor instanceof BooleanDeductionGameplayProcessor);
+	}
+	
+	@Test
+	public void testGetGameplayProcessor_3() throws InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException {
+		GameplayProcessor processor = factory.getGameplayProcessor(3, USERNAME);
+		assertTrue(processor instanceof WeightedDeductionGameplayProcessor);
 	}
 	
 	@Test

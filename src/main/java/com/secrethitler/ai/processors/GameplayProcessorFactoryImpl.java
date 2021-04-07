@@ -11,7 +11,8 @@ public class GameplayProcessorFactoryImpl implements GameplayProcessorFactory {
 	protected static final RandomUtil RANDOM_UTIL = new RandomUtilImpl();
 	private static final Map<Integer, Class<? extends GameplayProcessor>> GAMEPLAY_PROCESSOR_LEVEL_MAP = ImmutableMap.<Integer, Class<? extends GameplayProcessor>>builder()
 			.put(1, SimpleGameplayProcessor.class)
-			.put(2, BooleanDecisionGameplayProcessor.class)
+			.put(2, BooleanDeductionGameplayProcessor.class)
+			.put(3, WeightedDeductionGameplayProcessor.class)
 			.build();
 	
 	@Override

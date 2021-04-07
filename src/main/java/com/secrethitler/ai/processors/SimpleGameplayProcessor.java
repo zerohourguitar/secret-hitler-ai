@@ -119,7 +119,7 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		if (CollectionUtils.isNotEmpty(withHitlerPreference)) {
 			return withHitlerPreference;
 		}
-		return getMostLikelyHitlerPreference(preferredPlayers, hitlerPreferred);
+		return getMostLikelyMatchesHitlerPreference(preferredPlayers, hitlerPreferred);
 	}
 	
 	protected List<PlayerData> getPreferredPlayers(PartyMembership myMembership, List<PlayerData> eligiblePlayers) {
@@ -143,7 +143,7 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		return players;
 	}
 	
-	protected List<PlayerData> getMostLikelyHitlerPreference(final List<PlayerData> players, final boolean hitlerPreferred) {
+	protected List<PlayerData> getMostLikelyMatchesHitlerPreference(final List<PlayerData> players, final boolean hitlerPreferred) {
 		return players;
 	}
 	
@@ -154,13 +154,13 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		}
 		Stream<PlayerData> governmentStream = gameData.getPlayers().stream()
 				.filter(player -> player.isPresident() || player.isChancellor());
-		Vote vote = isVoteJa(governmentStream, myPlayer.getPartyMembership(), myPlayer.getSecretRole(), gameData.getPlayers().size()) ? Vote.JA : Vote.NEIN;
+		Vote vote = isVoteJa(governmentStream, myPlayer.getPartyMembership(), myPlayer.getSecretRole(), gameData) ? Vote.JA : Vote.NEIN;
 		LOGGER.info(() -> String.format("%s is voting %s", username, vote.name()));
 		String[] args = {vote.name()};
 		return Optional.of(new GameplayAction(Action.VOTE, args));
 	}
 	
-	protected boolean isVoteJa(Stream<PlayerData> governmentStream, PartyMembership myMembership, SecretRole myRole, int numberOfPlayers) {
+	protected boolean isVoteJa(Stream<PlayerData> governmentStream, PartyMembership myMembership, SecretRole myRole, GameData gameData) {
 		return PartyMembership.FASCIST == myMembership ? 
 				governmentStream.anyMatch(player -> ImmutableSet.of(PartyMembership.FASCIST, PartyMembership.UNKNOWN).contains(player.getPartyMembership())) :
 					governmentStream.allMatch(player -> ImmutableSet.of(PartyMembership.LIBERAL, PartyMembership.UNKNOWN).contains(player.getPartyMembership()));
@@ -261,15 +261,11 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		if (unknownPlayers.isEmpty()) {
 			preferredPlayers = availablePlayers;
 		} else {
-			preferredPlayers = getPreferredPlayersToInvestigate(unknownPlayers);
+			preferredPlayers = getMostLikelyPartyMembers(unknownPlayers, PartyMembership.FASCIST);
 		}
 		PlayerData playerToInvestigate = randomUtil.getRandomItemFromList(preferredPlayers);
 		String[] args = {playerToInvestigate.getUsername()};
 		return Optional.of(new GameplayAction(Action.INVESTIGATE_PLAYER, args));
-	}
-	
-	protected List<PlayerData> getPreferredPlayersToInvestigate(List<PlayerData> unknownPlayers) {
-		return unknownPlayers;
 	}
 	
 	protected Optional<GameplayAction> chooseNextPresidentialCandidate(final GameData gameData) {
