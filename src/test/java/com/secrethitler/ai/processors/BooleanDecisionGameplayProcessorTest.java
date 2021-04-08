@@ -234,28 +234,28 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 		
 		assertEquals("AJ should be a suspected Fascist", -1, boolProcessor.getMembershipSuspicion("AJ"));
 		assertEquals("Sean should be a suspected Liberal", 1, boolProcessor.getMembershipSuspicion("Sean"));
-		assertTrue("policyOptionForNextGovernment flag should remain true", boolProcessor.policyOptionForNextGovernment);
+		assertTrue("policyOptionsForNextGovernment should remain empty", boolProcessor.policyOptionsForNextGovernment.isEmpty());
 	}
 	
 	@Test
 	public void testGovernmentDenied_HitlerNein() {
-		boolProcessor.policyOptionForNextGovernment = false;
+		boolProcessor.policyOptionsForNextGovernment = Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.FASCIST);
 		testGovernmentDenied(PartyMembership.FASCIST, SecretRole.HITLER, Vote.NEIN);
 		
 		assertEquals("AJ should be a suspected Liberal", 1, boolProcessor.getMembershipSuspicion("AJ"));
 		assertEquals("Sean should be a suspected Fascist", -1, boolProcessor.getMembershipSuspicion("Sean"));
-		assertFalse("policyOptionForNextGovernment flag should remain false", boolProcessor.policyOptionForNextGovernment);
+		assertFalse("policyOptionsForNextGovernment should remain", boolProcessor.policyOptionsForNextGovernment.isEmpty());
 	}
 	
 	@Test
 	public void testAnarchy() {
-		boolProcessor.policyOptionForNextGovernment = false;
+		boolProcessor.policyOptionsForNextGovernment = Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.FASCIST);
 		
 		testGovernmentDenied(PartyMembership.LIBERAL, SecretRole.LIBERAL, Vote.JA, Action.ANARCHY);
 		
 		assertEquals("AJ should be a suspected Liberal", 1, boolProcessor.getMembershipSuspicion("AJ"));
 		assertEquals("Sean should be a suspected Fascist", -1, boolProcessor.getMembershipSuspicion("Sean"));	
-		assertTrue("policyOptionForNextGovernment flag should be reset", boolProcessor.policyOptionForNextGovernment);
+		assertTrue("policyOptionsForNextGovernment should be reset", boolProcessor.policyOptionsForNextGovernment.isEmpty());
 	}
 	
 	private void testGovernmentDenied(PartyMembership myMembership, SecretRole myRole, Vote myVote) {
@@ -278,7 +278,7 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 	
 	@Test
 	public void testPolicyPlayed_NoPolicyOption() {
-		boolProcessor.policyOptionForNextGovernment = false;
+		boolProcessor.policyOptionsForNextGovernment = Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.FASCIST);
 		String[] args = {};
 		notification.setAction(new GameplayAction(Action.LIBERAL_POLICY, args));
 		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
@@ -292,7 +292,7 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 		
 		assertEquals("AJ should still be unknown", 0, boolProcessor.getMembershipSuspicion("AJ"));
 		assertEquals("Sean should still be unknown", 0, boolProcessor.getMembershipSuspicion("Sean"));
-		assertTrue("policyOptionForNextGovernment flag should be reset", boolProcessor.policyOptionForNextGovernment);
+		assertTrue("policyOptionForNextGovernment flag should be reset", boolProcessor.policyOptionsForNextGovernment.isEmpty());
 	}
 	
 	@Test
@@ -310,7 +310,7 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 		
 		assertEquals("AJ should be a suspected Liberal", 1, boolProcessor.getMembershipSuspicion("AJ"));
 		assertEquals("Sean should be a suspected Fascist", -1, boolProcessor.getMembershipSuspicion("Sean"));
-		assertTrue("policyOptionForNextGovernment flag should remain true", boolProcessor.policyOptionForNextGovernment);
+		assertTrue("policyOptionForNextGovernment flag should remain empty", boolProcessor.policyOptionsForNextGovernment.isEmpty());
 	}
 	
 	@Test
@@ -328,12 +328,13 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 		
 		assertEquals("AJ should be a suspected Fascist", -1, boolProcessor.getMembershipSuspicion("AJ"));
 		assertEquals("Sean should be a suspected Liberal", 1, boolProcessor.getMembershipSuspicion("Sean"));
-		assertTrue("policyOptionForNextGovernment flag should remain true", boolProcessor.policyOptionForNextGovernment);
+		assertTrue("policyOptionsForNextGovernment should remain empty", boolProcessor.policyOptionsForNextGovernment.isEmpty());
 	}
 	
 	@Test
 	public void testPolicyPlayed_VetoRequestor() {
 		boolProcessor.vetoRequestor = Optional.of("Sean");
+		boolProcessor.previousChancellor = "Sean";
 		String[] args = {};
 		notification.setAction(new GameplayAction(Action.FASCIST_POLICY, args));
 		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
@@ -347,7 +348,7 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 		
 		assertEquals("AJ should be a suspected Fascist", -1, boolProcessor.getMembershipSuspicion("AJ"));
 		assertEquals("Sean should be a suspected Liberal", 1, boolProcessor.getMembershipSuspicion("Sean"));
-		assertTrue("policyOptionForNextGovernment flag should remain true", boolProcessor.policyOptionForNextGovernment);
+		assertTrue("policyOptionsForNextGovernment should remain empty", boolProcessor.policyOptionsForNextGovernment.isEmpty());
 		assertEquals("The vetoRequestor should be reset", Optional.empty(), boolProcessor.vetoRequestor);
 	}
 	
@@ -356,21 +357,21 @@ public class BooleanDecisionGameplayProcessorTest extends SimpleGameplayProcesso
 	public void testExamine_President() {
 		super.testExamine_President();
 		
-		assertTrue("The next government has a choice for their policy", boolProcessor.policyOptionForNextGovernment);
+		assertFalse("The next government has a choice for their policy", boolProcessor.policyOptionsForNextGovernment.isEmpty());
 	}
 	
 	@Test
 	public void testExamine_AllFascist() {
 		testExamine_President(Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.FASCIST));
 		
-		assertFalse("The next government does not have a choice for their policy", boolProcessor.policyOptionForNextGovernment);
+		assertFalse("The next government does not have a choice for their policy", boolProcessor.policyOptionsForNextGovernment.isEmpty());
 	}
 	
 	@Test
 	public void testExamine_AllLiberal() {		
 		testExamine_President(Arrays.asList(Policy.LIBERAL, Policy.LIBERAL, Policy.LIBERAL));
 		
-		assertFalse("The next government does not have a choice for their policy", boolProcessor.policyOptionForNextGovernment);
+		assertFalse("The next government does not have a choice for their policy", boolProcessor.policyOptionsForNextGovernment.isEmpty());
 	}
 	
 	@Test

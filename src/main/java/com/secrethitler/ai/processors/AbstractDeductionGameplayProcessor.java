@@ -79,8 +79,8 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 	protected Set<String> provenNonHitlers = new HashSet<>();
 	protected List<Policy> policyOptionsForNextGovernment = new ArrayList<>();
 	protected Optional<String> vetoRequestor = Optional.empty();
-	protected String previousPresident;
-	protected String previousChancellor;
+	protected String previousPresident = "";
+	protected String previousChancellor = "";
 
 	public AbstractDeductionGameplayProcessor(final String username, final RandomUtil randomUtil) {
 		super(username, randomUtil);
@@ -289,12 +289,12 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 				.filter(PlayerData::isPresident)
 				.map(PlayerData::getUsername)
 				.findAny()
-				.orElse(null);
+				.orElse("");
 		previousChancellor = gameData.getPlayers().stream()
 				.filter(PlayerData::isChancellor)
 				.map(PlayerData::getUsername)
 				.findAny()
-				.orElse(null);
+				.orElse("");
 		return super.makePresidentChoice(gameData);
 	}
 	

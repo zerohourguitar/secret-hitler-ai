@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -304,22 +305,22 @@ public class SimpleGameplayProcessorTest {
 	
 	@Test
 	public void testMakePresidentChoice_LiberalWithFascistPolicy() {		
-		testMakePresidentChoice_President(PartyMembership.LIBERAL, Arrays.asList(Policy.LIBERAL, Policy.FASCIST, Policy.FASCIST), 1);
+		testMakePresidentChoice_President(PartyMembership.LIBERAL, new ArrayList<>(Arrays.asList(Policy.LIBERAL, Policy.FASCIST, Policy.FASCIST)), 1);
 	}
 	
 	@Test
 	public void testMakePresidentChoice_LiberalWithAllLiberals() {		
-		testMakePresidentChoice_President(PartyMembership.LIBERAL, Arrays.asList(Policy.LIBERAL, Policy.LIBERAL, Policy.LIBERAL), 0);
+		testMakePresidentChoice_President(PartyMembership.LIBERAL, new ArrayList<>(Arrays.asList(Policy.LIBERAL, Policy.LIBERAL, Policy.LIBERAL)), 0);
 	}
 	
 	@Test
 	public void testMakePresidentChoice_FascistWithLiberalPolicy() {		
-		testMakePresidentChoice_President(PartyMembership.FASCIST, Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.LIBERAL), 2);
+		testMakePresidentChoice_President(PartyMembership.FASCIST, new ArrayList<>(Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.LIBERAL)), 2);
 	}
 	
 	@Test
 	public void testMakePresidentChoice_LiberalWithAllFascist() {		
-		testMakePresidentChoice_President(PartyMembership.FASCIST, Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.FASCIST), 0);
+		testMakePresidentChoice_President(PartyMembership.FASCIST, new ArrayList<>(Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.FASCIST)), 0);
 	}
 	
 	private void testMakePresidentChoice_President(PartyMembership membership, List<Policy> policies, int expectedIndex) {
