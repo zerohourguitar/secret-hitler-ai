@@ -10,6 +10,7 @@ import java.util.function.Function;
 import java.util.logging.Logger;
 
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.math3.util.CombinatoricsUtils;
 
 import com.google.common.collect.ImmutableMap;
 import com.secrethitler.ai.dtos.GameData;
@@ -27,6 +28,10 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 	private static final int FAILED_VETO_FACTOR = 1000;
 	private static final int FASCIST_POLICY_CHOSEN = -1000;
 	private static final int LIBERAL_POLICY_CHOSEN = 200;
+	
+	private static int numberOfCombinations(final int totalObjects, final int selectedObjects) {
+		return (int) (CombinatoricsUtils.factorial(totalObjects) / (CombinatoricsUtils.factorial(selectedObjects) * CombinatoricsUtils.factorial(totalObjects - selectedObjects)));
+	}
 	
 	private final Map<SuspicionAction, BiFunction<Integer, GameData, Integer>> suspicionActionToWeightedSuspicionFunctionMap = 
 			ImmutableMap.<SuspicionAction, BiFunction<Integer, GameData, Integer>>builder()
@@ -164,12 +169,18 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 		int liberalPoliciesUsed = gameData.getLiberalPolicies() + liberalPoliciesDiscarded;
 		int fascistPoliciesRemaining = 11 - fascistPoliciesUsed;
 		int liberalPoliciesRemaining = 6 - liberalPoliciesUsed;
-		double chanceLiberalExists = liberalPoliciesRemaining / (fascistPoliciesRemaining + liberalPoliciesRemaining) * 3;
-		double chanceFascistExists = fascistPoliciesRemaining / (fascistPoliciesRemaining + liberalPoliciesRemaining) * 3;
+		int totalPoliciesRemaining = fascistPoliciesRemaining + liberalPoliciesRemaining;
+		int totalCombinations = numberOfCombinations(totalPoliciesRemaining, 3);
+		int combinationsWithNoLiberals = numberOfCombinations(fascistPoliciesRemaining, 3);
+		double chanceNoLiberalChoice = combinationsWithNoLiberals / totalCombinations;
+		double chanceLiberalExists = 1 - chanceNoLiberalChoice;
+		int combinationsWithNoFascists = numberOfCombinations(liberalPoliciesRemaining, 3);
+		double chanceNoFascistChoice = combinationsWithNoFascists / totalCombinations;
+		double chanceFascistExists = 1 - chanceNoFascistChoice;
 		if (suspicion == -1) {
-			return (int) Math.round(FASCIST_POLICY_CHOSEN * chanceLiberalExists);
+			return (int) Math.round(FASCIST_POLICY_CHOSEN * chanceLiberalExists / 2);
 		} else {
-			return (int) Math.round(LIBERAL_POLICY_CHOSEN * chanceFascistExists);
+			return (int) Math.round(LIBERAL_POLICY_CHOSEN * chanceFascistExists / 2);
 		}
 	}
 	
