@@ -30,9 +30,14 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 	private static final double PRESIDENT_BLAME_SHARE_FOR_DISCARDING_LIBERAL = 0.75;
 	private static final int STARTING_FASCIST_POLICIES = 11;
 	private static final int STARTING_LIBERAL_POLICIES = 6;
+	private static final double VOTE_CHOICE_UNKNOWN_FACTOR = 0.3;
+	private static final double KILL_UNKNOWN_FACTOR = 0.8;
+	private static final int CHANCELLOR_VETO_FACTOR = 1000;
+	private static final int SUCCESSFUL_VETO_WITH_KNOWN_MEMBERSHIP_FACTOR = 1000;
+	private static final double TEAMMATE_CHOSEN_UNKNOWN_FACTOR = 0.5;
 	
 	private static boolean isFascist(final int suspicion) {
-		return suspicion == PARTY_MEMBERSHIP_TO_SUSPICION_MAP.get(PartyMembership.FASCIST);
+		return suspicion < 0;
 	}
 	
 	private static int getSuspicionForPolicyWithOneFascist(final int suspicion, final boolean isPresident) {
@@ -74,8 +79,8 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 			.put(SuspicionAction.KILLED_PLAYER, this::killedPlayer)
 			.put(SuspicionAction.CHANCELLOR_VETO, this::chancellorVeto)
 			.put(SuspicionAction.SUCCESSFUL_VETO, this::succesfulVeto)
-			.put(SuspicionAction.RUNNING_MATE_CHOSEN, this::runningMateChosen)
-			.put(SuspicionAction.PRESIDENTIAL_CANDIDATE_CHOSEN, this::presidentialCandidateChosen)
+			.put(SuspicionAction.RUNNING_MATE_CHOSEN, this::teammateChosen)
+			.put(SuspicionAction.PRESIDENTIAL_CANDIDATE_CHOSEN, this::teammateChosen)
 			.build();
 	
 	private final Map<String, Integer> weightedUserSuspicionMap = new HashMap<>();
@@ -189,26 +194,30 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 	}
 
 	private int voteChoiceResult(final int suspicion, final GameData gameData) {
-		return suspicion;
+		return (int) Math.round(suspicion * VOTE_CHOICE_UNKNOWN_FACTOR);
 	}
 	
 	private int killedPlayer(final int suspicion, final GameData gameData) {
-		return suspicion;
+		return (int) Math.round(suspicion * KILL_UNKNOWN_FACTOR);
 	}
 	
 	private int chancellorVeto(final int suspicion, final GameData gameData) {
-		return suspicion;
+		return suspicion * CHANCELLOR_VETO_FACTOR;
 	}
 	
 	private int succesfulVeto(final int suspicion, final GameData gameData) {
+		Optional<PartyMembership> knownMembership = gameData.getPlayers().stream()
+				.filter(player -> previousPresident.equals(player.getUsername()) || previousChancellor.equals(player.getUsername()))
+				.map(PlayerData::getPartyMembership)
+				.filter(membership -> PartyMembership.UNKNOWN != membership)
+				.findAny();
+		if (knownMembership.isPresent()) {
+			return PARTY_MEMBERSHIP_TO_SUSPICION_MAP.get(knownMembership.get()) * SUCCESSFUL_VETO_WITH_KNOWN_MEMBERSHIP_FACTOR;
+		}
 		return suspicion;
 	}
 	
-	private int runningMateChosen(final int suspicion, final GameData gameData) {
-		return suspicion;
-	}
-	
-	private int presidentialCandidateChosen(final int suspicion, final GameData gameData) {
-		return suspicion;
+	private int teammateChosen(final int suspicion, final GameData gameData) {
+		return (int) Math.round(suspicion * TEAMMATE_CHOSEN_UNKNOWN_FACTOR);
 	}
 }

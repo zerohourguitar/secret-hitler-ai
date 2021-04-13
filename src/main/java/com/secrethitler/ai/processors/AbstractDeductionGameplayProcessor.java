@@ -211,6 +211,7 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 		GameData gameData = notification.getGameData();
 		Set<Policy> uniquePolicies = new HashSet<>(policyOptionsForNextGovernment);
 		if (uniquePolicies.size() != 1) {
+			final int mostSuspiciousGovernmentMemberBeforeVote = Math.min(getMembershipSuspicion(previousPresident), getMembershipSuspicion(previousChancellor));
 			gameData.getPlayers().stream()
 					.filter(PlayerData::isAlive)
 					.filter(player -> PartyMembership.UNKNOWN == player.getPartyMembership())
@@ -228,9 +229,9 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 								updateSuspectedMembership(player, getSuspectedMembershipFromPolicy(policy), SuspicionAction.POLICY_PASSED_PRESIDENT, notification.getGameData());
 							}
 						} else {
-							Policy policyVotedFor = Vote.JA == player.getVote() ?
-									policy : getOppositePolicy(policy);
-							updateSuspectedMembership(player, getSuspectedMembershipFromPolicy(policyVotedFor), SuspicionAction.VOTE_CHOICE_RESULT, notification.getGameData());
+							int suspicion = Vote.JA == player.getVote() ?
+									mostSuspiciousGovernmentMemberBeforeVote : mostSuspiciousGovernmentMemberBeforeVote * -1;
+							updateSuspectedMembership(player, suspicion, SuspicionAction.VOTE_CHOICE_RESULT, notification.getGameData());
 						}
 					});
 			printSuspectedPlayerMatrix(String.format("%s policy was inacted", policy.name()));

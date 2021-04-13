@@ -7,6 +7,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -280,7 +281,7 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 	
 	@Test
 	public void testAnarchy() {
-		deductionProcessor.policyOptionsForNextGovernment = Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.FASCIST);
+		deductionProcessor.policyOptionsForNextGovernment = new ArrayList<>(Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.FASCIST));
 		
 		testGovernmentDenied(PartyMembership.LIBERAL, SecretRole.LIBERAL, Vote.JA, Action.ANARCHY);
 		
@@ -308,7 +309,7 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 	
 	@Test
 	public void testPolicyPlayed_NoPolicyOption() {
-		deductionProcessor.policyOptionsForNextGovernment = Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.FASCIST);
+		deductionProcessor.policyOptionsForNextGovernment = new ArrayList<>(Arrays.asList(Policy.FASCIST, Policy.FASCIST, Policy.FASCIST));
 		String[] args = {};
 		notification.setAction(new GameplayAction(Action.LIBERAL_POLICY, args));
 		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
@@ -331,6 +332,11 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
 		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
 		myPlayer.setSecretRole(SecretRole.LIBERAL);
+		deductionProcessor.previousPresident = "Liberal";
+		deductionProcessor.updateSuspectedMembership(liberal, PartyMembership.LIBERAL, null, null);
+		deductionProcessor.previousChancellor = "Liberal2";
+		deductionProcessor.updateSuspectedMembership(liberal2, PartyMembership.LIBERAL, null, null);
+		
 		aj.setVote(Vote.JA);
 		sean.setVote(Vote.NEIN);
 		gameData.setPlayers(Arrays.asList(aj, sean, deadPlayer, fascist, liberal));
@@ -351,6 +357,10 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 		aj.setVote(Vote.JA);
 		sean.setVote(Vote.NEIN);
 		gameData.setPlayers(Arrays.asList(aj, sean, deadPlayer, fascist, liberal));
+		deductionProcessor.previousPresident = "Liberal";
+		deductionProcessor.updateSuspectedMembership(liberal, PartyMembership.LIBERAL, null, null);
+		deductionProcessor.previousChancellor = "Fascist";
+		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
 		
 		processor.getActionToTake(notification);
 		
@@ -370,6 +380,8 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 		aj.setVote(Vote.JA);
 		sean.setVote(Vote.JA);
 		gameData.setPlayers(Arrays.asList(aj, sean, deadPlayer, fascist, liberal));
+		deductionProcessor.previousPresident = "Fascist";
+		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
 		
 		processor.getActionToTake(notification);
 		
