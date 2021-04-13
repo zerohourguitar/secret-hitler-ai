@@ -27,6 +27,42 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 	private static final int FAILED_VETO_FACTOR = 1000;
 	private static final int FASCIST_POLICY_CHOSEN = -1000;
 	private static final int LIBERAL_POLICY_CHOSEN = 200;
+	private static final double PRESIDENT_BLAME_SHARE_FOR_DISCARDING_LIBERAL = 0.75;
+	private static final int STARTING_FASCIST_POLICIES = 11;
+	private static final int STARTING_LIBERAL_POLICIES = 6;
+	
+	private static boolean isFascist(final int suspicion) {
+		return suspicion == PARTY_MEMBERSHIP_TO_SUSPICION_MAP.get(PartyMembership.FASCIST);
+	}
+	
+	private static int getSuspicionForPolicyWithOneFascist(final int suspicion, final boolean isPresident) {
+		if (isFascist(suspicion)) {
+			if (isPresident) {
+				return (int) Math.round(FASCIST_POLICY_CHOSEN * PRESIDENT_BLAME_SHARE_FOR_DISCARDING_LIBERAL);
+			}
+			return FASCIST_POLICY_CHOSEN;
+		}
+		return LIBERAL_POLICY_CHOSEN / 2;
+	}
+
+	private static int getSuspicionForPolicyWithTwoFascists(final int suspicion) {
+		if (isFascist(suspicion)) {
+			return FASCIST_POLICY_CHOSEN / 2;
+		}
+		return LIBERAL_POLICY_CHOSEN;
+	}
+	
+	private static long getTotalPolicyCombinations(int suspicion, int fascistPoliciesRemaining, int liberalPoliciesRemaining) {
+		int totalPoliciesRemaining = fascistPoliciesRemaining + liberalPoliciesRemaining;
+		long totalCombinations = CombinatoricsUtils.binomialCoefficient(totalPoliciesRemaining, 3);
+		if (isFascist(suspicion)) {
+			long combinationsWithNoFascists = CombinatoricsUtils.binomialCoefficient(liberalPoliciesRemaining, 3);
+			
+			return totalCombinations - combinationsWithNoFascists;
+		}
+		long combinationsWithNoLiberals = CombinatoricsUtils.binomialCoefficient(fascistPoliciesRemaining, 3);
+		return totalCombinations - combinationsWithNoLiberals;
+	}
 	
 	private final Map<SuspicionAction, BiFunction<Integer, GameData, Integer>> suspicionActionToWeightedSuspicionFunctionMap = 
 			ImmutableMap.<SuspicionAction, BiFunction<Integer, GameData, Integer>>builder()
@@ -96,25 +132,7 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 	}
 	
 	private int policyPassedPresident(final int suspicion, final GameData gameData) {
-		if (CollectionUtils.isNotEmpty(policyOptionsForNextGovernment)) {
-			long fascistPolicies = policyOptionsForNextGovernment.stream()
-					.filter(policy -> Policy.FASCIST == policy)
-					.count();
-			if (fascistPolicies == 1) {
-				if (suspicion == -1) {
-					return (int) Math.round(FASCIST_POLICY_CHOSEN * 0.75);
-				} else {
-					return LIBERAL_POLICY_CHOSEN / 2;
-				}
-			} else {
-				if (suspicion == -1) {
-					return FASCIST_POLICY_CHOSEN / 2;
-				} else {
-					return LIBERAL_POLICY_CHOSEN;
-				}
-			}
-		}
-		return policyPassed(suspicion, gameData);
+		return policyPassed(suspicion, gameData, true);
 	}
 	
 	private int policyPassedChancellor(final int suspicion, final GameData gameData) {
@@ -123,37 +141,28 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 		PlayerData myPlayer = gameData.getMyPlayer();
 		if (previousPresident.equals(myPlayer.getUsername())) {
 			if (chancellorHasChoice) {
-				if (suspicion == -1) {
+				if (isFascist(suspicion)) {
 					return FASCIST_POLICY_CHOSEN;
-				} else {
-					return LIBERAL_POLICY_CHOSEN;
 				}
-			} else {
-				return 0;
+				return LIBERAL_POLICY_CHOSEN;
 			}
+			return 0;
 		}
+		
+		return policyPassed(suspicion, gameData, false);
+	}
+
+	private int policyPassed(final int suspicion, final GameData gameData, final boolean isPresident) {
 		if (CollectionUtils.isNotEmpty(policyOptionsForNextGovernment)) {
 			long fascistPolicies = policyOptionsForNextGovernment.stream()
 					.filter(policy -> Policy.FASCIST == policy)
 					.count();
 			if (fascistPolicies == 1) {
-				if (suspicion == -1) {
-					return FASCIST_POLICY_CHOSEN;
-				} else {
-					return LIBERAL_POLICY_CHOSEN / 2;
-				}
-			} else {
-				if (suspicion == -1) {
-					return FASCIST_POLICY_CHOSEN / 2;
-				} else {
-					return LIBERAL_POLICY_CHOSEN;
-				}
+				return getSuspicionForPolicyWithOneFascist(suspicion, isPresident);
 			}
+			return getSuspicionForPolicyWithTwoFascists(suspicion);
 		}
-		return policyPassed(suspicion, gameData);
-	}
-
-	private int policyPassed(final int suspicion, final GameData gameData) {
+		
 		int fascistPoliciesDiscarded = (int) knownDiscardedPolicies.stream()
 				.filter(policy -> Policy.FASCIST == policy)
 				.count();
@@ -162,23 +171,23 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 				.filter(policy -> Policy.LIBERAL == policy)
 				.count();
 		int liberalPoliciesUsed = gameData.getLiberalPolicies() + liberalPoliciesDiscarded;
-		int fascistPoliciesRemaining = 11 - fascistPoliciesUsed;
-		int liberalPoliciesRemaining = 6 - liberalPoliciesUsed;
-		int totalPoliciesRemaining = fascistPoliciesRemaining + liberalPoliciesRemaining;
-		long totalCombinations = CombinatoricsUtils.binomialCoefficient(totalPoliciesRemaining, 3);
-		long combinationsWithNoLiberals = CombinatoricsUtils.binomialCoefficient(fascistPoliciesRemaining, 3);
-		double chanceNoLiberalChoice = combinationsWithNoLiberals / totalCombinations;
-		double chanceLiberalExists = 1 - chanceNoLiberalChoice;
-		long combinationsWithNoFascists = CombinatoricsUtils.binomialCoefficient(liberalPoliciesRemaining, 3);
-		double chanceNoFascistChoice = combinationsWithNoFascists / totalCombinations;
-		double chanceFascistExists = 1 - chanceNoFascistChoice;
-		if (suspicion == -1) {
-			return (int) Math.round(FASCIST_POLICY_CHOSEN * chanceLiberalExists / 2);
-		} else {
-			return (int) Math.round(LIBERAL_POLICY_CHOSEN * chanceFascistExists / 2);
-		}
+		
+		int fascistPoliciesRemaining = STARTING_FASCIST_POLICIES - fascistPoliciesUsed;
+		int liberalPoliciesRemaining = STARTING_LIBERAL_POLICIES - liberalPoliciesUsed;
+		
+		long totalCombinations = getTotalPolicyCombinations(suspicion, fascistPoliciesRemaining, liberalPoliciesRemaining);
+		
+		long combinationsWithOneFascist = CombinatoricsUtils.binomialCoefficient(fascistPoliciesRemaining, 1) * CombinatoricsUtils.binomialCoefficient(liberalPoliciesRemaining, 2);
+		double chanceOneFascist = combinationsWithOneFascist / totalCombinations;
+		long combinationsWithTwoFascists = CombinatoricsUtils.binomialCoefficient(fascistPoliciesRemaining, 2) * CombinatoricsUtils.binomialCoefficient(liberalPoliciesRemaining, 1);
+		double chanceTwoFascists = combinationsWithTwoFascists / totalCombinations;
+		
+		int suspicionOfOneFascist = (int) Math.round(getSuspicionForPolicyWithOneFascist(suspicion, isPresident) * chanceOneFascist);
+		int suspicionOfTwoFascists = (int) Math.round(getSuspicionForPolicyWithTwoFascists(suspicion) * chanceTwoFascists);
+		
+		return suspicionOfOneFascist + suspicionOfTwoFascists;
 	}
-	
+
 	private int voteChoiceResult(final int suspicion, final GameData gameData) {
 		return suspicion;
 	}

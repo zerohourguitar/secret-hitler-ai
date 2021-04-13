@@ -195,7 +195,7 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 	}
 	
 	protected void anarchyDeducer(final ParticipantGameNotification notification) {
-		policyOptionsForNextGovernment = new ArrayList<>();
+		policyOptionsForNextGovernment.clear();
 		governmentDeniedDeducer(notification);
 	}
 	
@@ -235,7 +235,7 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 					});
 			printSuspectedPlayerMatrix(String.format("%s policy was inacted", policy.name()));
 		}
-		policyOptionsForNextGovernment = new ArrayList<>();
+		policyOptionsForNextGovernment.clear();
 		vetoRequestor = Optional.empty();
 	}
 	
