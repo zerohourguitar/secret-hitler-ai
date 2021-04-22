@@ -154,15 +154,15 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 		if (myPlayer.isVoteReady() || !myPlayer.isAlive()) {
 			return Optional.empty();
 		}
-		Stream<PlayerData> governmentStream = gameData.getPlayers().stream()
-				.filter(player -> player.isPresident() || player.isChancellor());
-		Vote vote = isVoteJa(governmentStream, myPlayer.getPartyMembership(), myPlayer.getSecretRole(), gameData) ? Vote.JA : Vote.NEIN;
+		Vote vote = isVoteJa(myPlayer.getPartyMembership(), myPlayer.getSecretRole(), gameData) ? Vote.JA : Vote.NEIN;
 		LOGGER.info(() -> String.format("%s is voting %s", username, vote.name()));
 		String[] args = {vote.name()};
 		return Optional.of(new GameplayAction(Action.VOTE, args));
 	}
 	
-	protected boolean isVoteJa(Stream<PlayerData> governmentStream, PartyMembership myMembership, SecretRole myRole, GameData gameData) {
+	protected boolean isVoteJa(PartyMembership myMembership, SecretRole myRole, GameData gameData) {
+		Stream<PlayerData> governmentStream = gameData.getPlayers().stream()
+				.filter(player -> player.isPresident() || player.isChancellor());
 		return PartyMembership.FASCIST == myMembership ? 
 				governmentStream.anyMatch(player -> ImmutableSet.of(PartyMembership.FASCIST, PartyMembership.UNKNOWN).contains(player.getPartyMembership())) :
 					governmentStream.allMatch(player -> ImmutableSet.of(PartyMembership.LIBERAL, PartyMembership.UNKNOWN).contains(player.getPartyMembership()));
@@ -245,7 +245,6 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 			return Optional.empty();
 		}
 		boolean concur = presidentVetoHelper(gameData);
-		presidentVetoHelper(gameData);
 		String[] args = {Boolean.toString(concur)};
 		LOGGER.info(() -> String.format("%s is agreeing to the veto", username));
 		return Optional.of(new GameplayAction(Action.PRESIDENT_VETO, args));

@@ -1,6 +1,7 @@
 package com.secrethitler.ai.processors;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
 
@@ -47,4 +48,14 @@ public class BooleanDeductionGameplayProcessor extends AbstractDeductionGameplay
 		LOGGER.info(() -> String.format("%s's suspected player matrix after %s: %n%s", username, action, suspectedMemberships.toString()));
 	}
 	
+	@Override
+	protected void updateSuspectedMembershipsForGovernment(final List<PlayerData> team,
+			final SuspicionAction suspicionAction, final GameData gameData, int govtSuspectedMembership) {
+		if (govtSuspectedMembership == 0) {
+			team.forEach(player -> updateSuspectedMembership(player, PartyMembership.UNKNOWN, suspicionAction, gameData));
+		}
+		else {
+			team.forEach(player -> updateSuspectedMembership(player, govtSuspectedMembership - getMembershipSuspicion(player.getUsername()), suspicionAction, gameData));
+		}
+	}
 }

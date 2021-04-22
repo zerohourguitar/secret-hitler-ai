@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -16,7 +17,6 @@ import java.util.stream.Stream;
 import org.apache.commons.collections4.CollectionUtils;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import com.secrethitler.ai.dtos.GameData;
 import com.secrethitler.ai.dtos.GameplayAction;
 import com.secrethitler.ai.dtos.ParticipantGameNotification;
@@ -73,6 +73,20 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 			.put(PartyMembership.UNKNOWN, 0)
 			.put(PartyMembership.LIBERAL, 1)
 			.build();
+	
+	private static int symetricalRound(double dVal) {
+		int iVal = (int) Math.round(Math.abs(dVal));
+		if (dVal < 0) {
+			return iVal * -1;
+		}
+		return iVal;
+	}
+	
+	private static int getNumberOfFascistsFromNumberOfPlayers(int players) {
+		return (players - 5) / 2 + 2;
+	}
+	
+	private static int MAX_SUSPICION = 1000000;
 	
 	private final Map<Action, Consumer<ParticipantGameNotification>> actionToDeduceMap;
 	
@@ -131,42 +145,67 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 	}
 	
 	@Override
-	protected boolean isVoteJa(Stream<PlayerData> governmentStream, PartyMembership myMembership, SecretRole myRole, GameData gameData) {
+	protected boolean isVoteJa(PartyMembership myMembership, SecretRole myRole, GameData gameData) {
+		PlayerData president = gameData.getPlayers().stream()
+				.filter(PlayerData::isPresident)
+				.findAny()
+				.orElse(null);
+		PlayerData chancellor = gameData.getPlayers().stream()
+				.filter(PlayerData::isChancellor)
+				.findAny()
+				.orElse(null);
+		previousPresident = president.getUsername();
+		previousChancellor = chancellor.getUsername();
 		if (!playerKnowsRoles(myRole, gameData.getPlayers().size())) {
-			List<PlayerData> government = governmentStream.collect(Collectors.toList());
-			PartyMembership suspectedMembership = updateSuspectedMembershipForChosenTeam(government, SuspicionAction.RUNNING_MATE_CHOSEN, gameData);
+			updateSuspectedMembershipForChosenTeam(president, chancellor, SuspicionAction.RUNNING_MATE_CHOSEN, gameData);
 			printSuspectedPlayerMatrix("running mate was chosen");
-			
-			return ImmutableSet.of(PartyMembership.UNKNOWN, myMembership).contains(suspectedMembership);
+			Set<PlayerData> mostSuspectedFascists = getMostExpectedFascists(gameData);
+			boolean suspectedFascistInGovernment = Stream.of(president, chancellor).anyMatch(mostSuspectedFascists::contains);
+			return PartyMembership.FASCIST == myMembership ? suspectedFascistInGovernment : !suspectedFascistInGovernment;
 		}
-		return governmentStream.anyMatch(player -> PartyMembership.FASCIST == player.getPartyMembership());
+		return Stream.of(president, chancellor).anyMatch(player -> PartyMembership.FASCIST == player.getPartyMembership());
 	}
 
-	private PartyMembership updateSuspectedMembershipForChosenTeam(final List<PlayerData> team, final SuspicionAction suspicionAction, final GameData gameData) {
+	private Set<PlayerData> getMostExpectedFascists(GameData gameData) {
+		Set<PlayerData> mostSuspectedFascists = gameData.getPlayers().stream()
+				.filter(player -> PartyMembership.FASCIST == player.getPartyMembership())
+				.collect(Collectors.toSet());
+		int totalFascists = getNumberOfFascistsFromNumberOfPlayers(gameData.getPlayers().size());
+		List<Set<PlayerData>> playersOrderedBySuspicion = gameData.getPlayers().stream()
+				.collect(Collectors.groupingBy(player -> getMembershipSuspicion(player.getUsername()), Collectors.toSet()))
+				.entrySet().stream()
+				.sorted((entry1, entry2) -> entry1.getKey().compareTo(entry2.getKey()))
+				.map(Entry::getValue)
+				.collect(Collectors.toList());
+		Iterator<Set<PlayerData>> it = playersOrderedBySuspicion.iterator();
+		while(it.hasNext()) {
+			Set<PlayerData> players = it.next();
+			if (mostSuspectedFascists.size() + players.size() > totalFascists) {
+				break;
+			}
+			mostSuspectedFascists.addAll(players);
+		}
+		return mostSuspectedFascists;
+	}
+
+	private void updateSuspectedMembershipForChosenTeam(final PlayerData president, final PlayerData chancellor, final SuspicionAction suspicionAction, final GameData gameData) {
+		if (username.equals(president.getUsername())) {
+			return;
+		}
+		List<PlayerData> team = Arrays.asList(president, chancellor);
 		Set<PartyMembership> knownMemberships = team.stream()
 				.map(PlayerData::getPartyMembership)
 				.filter(membership -> PartyMembership.UNKNOWN != membership)
 				.collect(Collectors.toSet());
-		PartyMembership suspectedMembership = PartyMembership.UNKNOWN;
 		if (knownMemberships.size() == 1) {
 			PartyMembership knownMembership = knownMemberships.stream().findAny().orElse(null);
-			suspectedMembership = knownMembership;
 			team.forEach(player -> updateSuspectedMembership(player, knownMembership, suspicionAction, gameData));
-		} else if (knownMemberships.size() == 2) {
-			suspectedMembership = PartyMembership.FASCIST;
-		} else {
-			int govtSuspectedMembership = team.stream()
+		} else if (knownMemberships.size() == 0) {
+			int govtSuspectedMembership = symetricalRound(team.stream()
 					.mapToInt(player -> getMembershipSuspicion(player.getUsername()))
-					.sum();
-			if (govtSuspectedMembership == 0) {
-				team.forEach(player -> updateSuspectedMembership(player, PartyMembership.UNKNOWN, suspicionAction, gameData));
-			}
-			else {
-				team.forEach(player -> updateSuspectedMembership(player, govtSuspectedMembership - getMembershipSuspicion(player.getUsername()), suspicionAction, gameData));
-			}
-			suspectedMembership = getPartyMembership(govtSuspectedMembership);
+					.sum() / 2d);
+			updateSuspectedMembershipsForGovernment(team, suspicionAction, gameData, govtSuspectedMembership);
 		}
-		return suspectedMembership;
 	}
 	
 	protected void governmentElectedDeducer(final ParticipantGameNotification notification) {
@@ -183,13 +222,14 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 		GameData gameData = notification.getGameData();
 		PlayerData myPlayer = gameData.getMyPlayer();
 		PartyMembership myMembership = myPlayer.getPartyMembership();
+		final int mostSuspiciousGovernmentMemberBeforeVote = getMostSuspiciousGovernmentMember(new HashSet<>(Arrays.asList(previousPresident, previousChancellor)), gameData);
 		gameData.getPlayers().stream()
 				.filter(PlayerData::isAlive)
 				.filter(player -> PartyMembership.UNKNOWN == player.getPartyMembership())
 				.forEach(player -> {
-					PartyMembership suspectedMembership = myPlayer.getVote() == player.getVote() ?
-							myMembership : getOppositeMembership(myMembership);
-					updateSuspectedMembership(player, suspectedMembership, SuspicionAction.GOVERNMENT_DENIED_VOTE, gameData);
+					int suspicion = Vote.JA == player.getVote() ?
+							mostSuspiciousGovernmentMemberBeforeVote : mostSuspiciousGovernmentMemberBeforeVote * -1;
+					updateSuspectedMembership(player, suspicion, SuspicionAction.VOTE_CHOICE_RESULT, notification.getGameData());
 				});
 		printSuspectedPlayerMatrix("government was denied");
 	}
@@ -211,7 +251,7 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 		GameData gameData = notification.getGameData();
 		Set<Policy> uniquePolicies = new HashSet<>(policyOptionsForNextGovernment);
 		if (uniquePolicies.size() != 1) {
-			final int mostSuspiciousGovernmentMemberBeforeVote = Math.min(getMembershipSuspicion(previousPresident), getMembershipSuspicion(previousChancellor));
+			final int mostSuspiciousGovernmentMemberBeforeVote = getMostSuspiciousGovernmentMember(new HashSet<>(Arrays.asList(previousPresident, previousChancellor)), gameData);
 			gameData.getPlayers().stream()
 					.filter(PlayerData::isAlive)
 					.filter(player -> PartyMembership.UNKNOWN == player.getPartyMembership())
@@ -240,6 +280,34 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 		vetoRequestor = Optional.empty();
 	}
 	
+	private int getMostSuspiciousGovernmentMember(Set<String> governmentMembers, GameData gameData) {
+		Set<PlayerData> mostSuspectedFascists = getMostExpectedFascists(gameData);
+		int leastSuspiciousOfTheMost = mostSuspectedFascists.stream()
+				.mapToInt(player -> {
+					if (PartyMembership.FASCIST == player.getPartyMembership()) {
+						return MAX_SUSPICION * -1;
+					}
+					return getMembershipSuspicion(player.getUsername());
+				})
+				.max()
+				.orElse(0);
+		Set<PlayerData> suspiciousGovernmentMembers = gameData.getPlayers().stream()
+				.filter(player -> governmentMembers.contains(player.getUsername()))
+				.filter(player -> PartyMembership.LIBERAL != player.getPartyMembership())
+				.collect(Collectors.toSet());
+		if (suspiciousGovernmentMembers.stream()
+				.map(PlayerData::getPartyMembership)
+				.anyMatch(PartyMembership.FASCIST::equals)) {
+			return MAX_SUSPICION * -1;
+		}
+		return suspiciousGovernmentMembers.stream()
+				.map(PlayerData::getUsername)
+				.mapToInt(this::getMembershipSuspicion)
+				.map(suspicion -> suspicion - leastSuspiciousOfTheMost)
+				.min()
+				.orElse(MAX_SUSPICION);
+	}
+
 	@Override
 	protected void examinationHelper(final GameData gameData) {
 		policyOptionsForNextGovernment = new ArrayList<>(gameData.getPoliciesToView());
@@ -284,26 +352,12 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 		return concur;
 	}
 	
-	@Override
-	protected Optional<GameplayAction> makePresidentChoice(final GameData gameData) {
-		previousPresident = gameData.getPlayers().stream()
-				.filter(PlayerData::isPresident)
-				.map(PlayerData::getUsername)
-				.findAny()
-				.orElse("");
-		previousChancellor = gameData.getPlayers().stream()
-				.filter(PlayerData::isChancellor)
-				.map(PlayerData::getUsername)
-				.findAny()
-				.orElse("");
-		return super.makePresidentChoice(gameData);
-	}
-	
 	protected void specialElectionChosenDeducer(final ParticipantGameNotification notification) {
-		updateSuspectedMembershipForChosenTeam(
-				Stream.of(notification.getAction().getArgs())
-						.map(username -> getPlayerByUsername(notification.getGameData().getPlayers(), username))
-						.collect(Collectors.toList()), SuspicionAction.PRESIDENTIAL_CANDIDATE_CHOSEN, notification.getGameData());
+		List<PlayerData> government = Stream.of(notification.getAction().getArgs())
+				.map(username -> getPlayerByUsername(notification.getGameData().getPlayers(), username))
+				.collect(Collectors.toList());
+		updateSuspectedMembershipForChosenTeam(government.get(0), government.get(1),
+				SuspicionAction.PRESIDENTIAL_CANDIDATE_CHOSEN, notification.getGameData());
 		printSuspectedPlayerMatrix("special election was chosen");
 	}
 	
@@ -318,9 +372,8 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 			return;
 		}
 		List<PlayerData> players = gameData.getPlayers();
-		updateSuspectedMembershipForChosenTeam(Arrays.asList(
-				getPlayerByUsername(players, presidentName), 
-				getPlayerByUsername(players, vetoRequestor.orElse(null))), SuspicionAction.SUCCESSFUL_VETO, gameData);
+		updateSuspectedMembershipForChosenTeam(getPlayerByUsername(players, presidentName),
+				getPlayerByUsername(players, vetoRequestor.orElse(null)), SuspicionAction.SUCCESSFUL_VETO, gameData);
 		printSuspectedPlayerMatrix("policies were vetoed");
 	}
 	
@@ -328,4 +381,6 @@ public abstract class AbstractDeductionGameplayProcessor extends SimpleGameplayP
 	protected abstract void updateSuspectedMembership(final PlayerData player, final PartyMembership membership, final SuspicionAction suspicionAction, final GameData gameData);
 	protected abstract void updateSuspectedMembership(final PlayerData player, final int suspicion, final SuspicionAction suspicionAction, final GameData gameData);
 	protected abstract void printSuspectedPlayerMatrix(final String action);
+	protected abstract void updateSuspectedMembershipsForGovernment(final List<PlayerData> team,
+			final SuspicionAction suspicionAction, final GameData gameData, int govtSuspectedMembership);
 }

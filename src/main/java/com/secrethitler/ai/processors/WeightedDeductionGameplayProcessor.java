@@ -35,6 +35,22 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 	private static final int CHANCELLOR_VETO_FACTOR = 1000;
 	private static final int SUCCESSFUL_VETO_WITH_KNOWN_MEMBERSHIP_FACTOR = 1000;
 	private static final double TEAMMATE_CHOSEN_UNKNOWN_FACTOR = 0.5;
+	private static final int MAX_TEAMMATE_CHOSEN_SUSPICION = 100;
+	private static final int MAX_VOTE_SUSPICION = 100;
+	
+	private static final Map<PartyMembership, Integer> TEAMMATE_CHOSEN_SUSPICION_MAP = ImmutableMap.<PartyMembership, Integer>builder()
+			.put(PartyMembership.FASCIST, (int) Math.round(MAX_TEAMMATE_CHOSEN_SUSPICION / TEAMMATE_CHOSEN_UNKNOWN_FACTOR * -1))
+			.put(PartyMembership.LIBERAL, (int) Math.round(MAX_TEAMMATE_CHOSEN_SUSPICION / TEAMMATE_CHOSEN_UNKNOWN_FACTOR))
+			.build();
+	
+	private static final Map<SuspicionAction, Map<PartyMembership, Integer>> ACTION_AND_MEMBERSHIP_TO_SUSPICION_MAP = ImmutableMap.<SuspicionAction, Map<PartyMembership, Integer>>builder()
+			.put(SuspicionAction.RUNNING_MATE_CHOSEN, TEAMMATE_CHOSEN_SUSPICION_MAP)
+			.put(SuspicionAction.PRESIDENTIAL_CANDIDATE_CHOSEN, TEAMMATE_CHOSEN_SUSPICION_MAP)
+			.put(SuspicionAction.SUCCESSFUL_VETO, ImmutableMap.<PartyMembership, Integer>builder()
+					.put(PartyMembership.FASCIST, SUCCESSFUL_VETO_WITH_KNOWN_MEMBERSHIP_FACTOR * -1)
+					.put(PartyMembership.LIBERAL, SUCCESSFUL_VETO_WITH_KNOWN_MEMBERSHIP_FACTOR)
+					.build())
+			.build();
 	
 	private static boolean isFascist(final int suspicion) {
 		return suspicion < 0;
@@ -59,14 +75,21 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 	
 	private static long getTotalPolicyCombinations(int suspicion, int fascistPoliciesRemaining, int liberalPoliciesRemaining) {
 		int totalPoliciesRemaining = fascistPoliciesRemaining + liberalPoliciesRemaining;
-		long totalCombinations = CombinatoricsUtils.binomialCoefficient(totalPoliciesRemaining, 3);
+		long totalCombinations = binomialCoefficientHelper(totalPoliciesRemaining, 3);
 		if (isFascist(suspicion)) {
-			long combinationsWithNoFascists = CombinatoricsUtils.binomialCoefficient(liberalPoliciesRemaining, 3);
+			long combinationsWithNoFascists = binomialCoefficientHelper(liberalPoliciesRemaining, 3);
 			
 			return totalCombinations - combinationsWithNoFascists;
 		}
-		long combinationsWithNoLiberals = CombinatoricsUtils.binomialCoefficient(fascistPoliciesRemaining, 3);
+		long combinationsWithNoLiberals = binomialCoefficientHelper(fascistPoliciesRemaining, 3);
 		return totalCombinations - combinationsWithNoLiberals;
+	}
+	
+	private static long binomialCoefficientHelper(int n, int k) {
+		if (n < k) {
+			return 0;
+		}
+		return CombinatoricsUtils.binomialCoefficient(n, k);
 	}
 	
 	private final Map<SuspicionAction, BiFunction<Integer, GameData, Integer>> suspicionActionToWeightedSuspicionFunctionMap = 
@@ -98,14 +121,14 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 	@Override
 	protected void updateSuspectedMembership(PlayerData player, PartyMembership membership,
 			SuspicionAction suspicionAction, GameData gameData) {
-		final int suspicion = PARTY_MEMBERSHIP_TO_SUSPICION_MAP.get(membership);
+		final int suspicion = ACTION_AND_MEMBERSHIP_TO_SUSPICION_MAP.getOrDefault(suspicionAction, PARTY_MEMBERSHIP_TO_SUSPICION_MAP).getOrDefault(membership, 0);
 		updateSuspectedMembership(player, suspicion, suspicionAction, gameData);
 	}
 
 	@Override
 	protected void updateSuspectedMembership(PlayerData player, int suspicion, SuspicionAction suspicionAction, GameData gameData) {
-		final int startingSuspicion = weightedUserSuspicionMap.getOrDefault(username, 0);
-		final int weightedSuspicionChange = suspicionActionToWeightedSuspicionFunctionMap.get(suspicionAction).apply(suspicion, gameData);
+		final int startingSuspicion = weightedUserSuspicionMap.getOrDefault(player.getUsername(), 0);
+		final int weightedSuspicionChange = suspicionActionToWeightedSuspicionFunctionMap.getOrDefault(suspicionAction, this::defaultWeightedSuspicionFunction).apply(suspicion, gameData);
 		weightedUserSuspicionMap.put(player.getUsername(), startingSuspicion + weightedSuspicionChange);
 	}
 
@@ -126,6 +149,16 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 			knownDiscardedPolicies.clear();
 		}
 		return super.pickRunningMate(gameData);
+	}
+	
+	@Override
+	protected void updateSuspectedMembershipsForGovernment(final List<PlayerData> team,
+			final SuspicionAction suspicionAction, final GameData gameData, int govtSuspectedMembership) {
+		team.forEach(player -> updateSuspectedMembership(player, govtSuspectedMembership - getMembershipSuspicion(player.getUsername()), suspicionAction, gameData));
+	}
+	
+	private int defaultWeightedSuspicionFunction(final int suspicion, final GameData gameData) {
+		return suspicion;
 	}
 
 	private int governmentDenied(final int suspicion, final GameData gameData) {
@@ -182,10 +215,10 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 		
 		long totalCombinations = getTotalPolicyCombinations(suspicion, fascistPoliciesRemaining, liberalPoliciesRemaining);
 		
-		long combinationsWithOneFascist = CombinatoricsUtils.binomialCoefficient(fascistPoliciesRemaining, 1) * CombinatoricsUtils.binomialCoefficient(liberalPoliciesRemaining, 2);
-		double chanceOneFascist = combinationsWithOneFascist / totalCombinations;
-		long combinationsWithTwoFascists = CombinatoricsUtils.binomialCoefficient(fascistPoliciesRemaining, 2) * CombinatoricsUtils.binomialCoefficient(liberalPoliciesRemaining, 1);
-		double chanceTwoFascists = combinationsWithTwoFascists / totalCombinations;
+		long combinationsWithOneFascist = binomialCoefficientHelper(fascistPoliciesRemaining, 1) * binomialCoefficientHelper(liberalPoliciesRemaining, 2);
+		double chanceOneFascist = ((double) combinationsWithOneFascist) / ((double) totalCombinations);
+		long combinationsWithTwoFascists = binomialCoefficientHelper(fascistPoliciesRemaining, 2) * binomialCoefficientHelper(liberalPoliciesRemaining, 1);
+		double chanceTwoFascists = ((double) combinationsWithTwoFascists) / ((double) totalCombinations);
 		
 		int suspicionOfOneFascist = (int) Math.round(getSuspicionForPolicyWithOneFascist(suspicion, isPresident) * chanceOneFascist);
 		int suspicionOfTwoFascists = (int) Math.round(getSuspicionForPolicyWithTwoFascists(suspicion) * chanceTwoFascists);
@@ -194,7 +227,12 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 	}
 
 	private int voteChoiceResult(final int suspicion, final GameData gameData) {
-		return (int) Math.round(suspicion * VOTE_CHOICE_UNKNOWN_FACTOR);
+		int rawSuspicion = (int) Math.round(suspicion * VOTE_CHOICE_UNKNOWN_FACTOR);
+		int changeInSuspicion = Math.min(MAX_VOTE_SUSPICION, Math.abs(rawSuspicion));
+		if (rawSuspicion < 0) {
+			return changeInSuspicion * -1;
+		}
+		return changeInSuspicion;
 	}
 	
 	private int killedPlayer(final int suspicion, final GameData gameData) {
@@ -206,18 +244,12 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 	}
 	
 	private int succesfulVeto(final int suspicion, final GameData gameData) {
-		Optional<PartyMembership> knownMembership = gameData.getPlayers().stream()
-				.filter(player -> previousPresident.equals(player.getUsername()) || previousChancellor.equals(player.getUsername()))
-				.map(PlayerData::getPartyMembership)
-				.filter(membership -> PartyMembership.UNKNOWN != membership)
-				.findAny();
-		if (knownMembership.isPresent()) {
-			return PARTY_MEMBERSHIP_TO_SUSPICION_MAP.get(knownMembership.get()) * SUCCESSFUL_VETO_WITH_KNOWN_MEMBERSHIP_FACTOR;
-		}
 		return suspicion;
 	}
 	
 	private int teammateChosen(final int suspicion, final GameData gameData) {
-		return (int) Math.round(suspicion * TEAMMATE_CHOSEN_UNKNOWN_FACTOR);
+		int rawSuspicion = (int) Math.round(suspicion * TEAMMATE_CHOSEN_UNKNOWN_FACTOR);
+		rawSuspicion = Math.min(MAX_TEAMMATE_CHOSEN_SUSPICION, rawSuspicion);
+		return Math.max(MAX_TEAMMATE_CHOSEN_SUSPICION * -1, rawSuspicion);
 	}
 }

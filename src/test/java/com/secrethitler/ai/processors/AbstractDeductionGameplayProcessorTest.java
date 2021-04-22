@@ -13,7 +13,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.junit.Before;
@@ -42,9 +41,11 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 		GOVERNMENT_DENIED_HITLER_NEIN,
 		ANARCHY,
 		POLICY_PLAYED_NO_POLICY_OPTION,
-		LIBERAL_POLICY_PLAYED,
-		FASCIST_POLICY_PLAYED,
+		POLICY_PLAYED_WITH_NEIN_VOTER,
 		POLICY_PLAYED_VETO_REQUESTOR,
+		POLICY_PLAYED_CHANCELLOR_NO_VETO,
+		POLICY_PLAYED_PRESIDENT_FAILED_VETO,
+		POLICY_PLAYED_PRESIDENT_NO_VETO,
 		SPECIAL_ELECTION_CHOSEN_SUSPECTED_LIBERAL,
 		SPECIAL_ELECTION_CHOSEN_SUSPECTED_FASCIST,
 		PRESIDENT_VETOED_KNOWN_LIBERAL,
@@ -88,19 +89,6 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 		sean.setPartyMembership(PartyMembership.UNKNOWN);
 		gameData.setPlayers(Collections.emptyList());
 		notification.setAction(new GameplayAction(Action.CONNECTED, null));
-	}
-
-	@Test
-	public void testupdateSuspectedMembership_BadSuspect() {
-		PlayerData player = new PlayerData();
-		player.setPartyMembership(PartyMembership.LIBERAL);
-		
-		try {
-			deductionProcessor.updateSuspectedMembership(player, PartyMembership.FASCIST, null, null);
-			fail("Expected an IllegalArgumentException to be thrown if we suspect a player to be membership that we know to be false");
-		} catch (IllegalArgumentException e) {
-			assertEquals("Tried to set a suspected membership of a player that is known to be incorrect!", e.getMessage());
-		}
 	}
 	
 	@Test
@@ -146,6 +134,9 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
 		myPlayer.setSecretRole(SecretRole.LIBERAL);
 		deductionProcessor.updateSuspectedMembership(aj, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(aj, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(aj, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(aj, PartyMembership.FASCIST, null, null);
 		
 		testVoteHelper(Vote.NEIN);
 		
@@ -157,6 +148,8 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 		myPlayer.setPartyMembership(PartyMembership.FASCIST);
 		myPlayer.setSecretRole(SecretRole.HITLER);
 		deductionProcessor.updateSuspectedMembership(aj, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(aj, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(sean, PartyMembership.LIBERAL, null, null);
 		deductionProcessor.updateSuspectedMembership(sean, PartyMembership.LIBERAL, null, null);
 		
 		testVoteHelper(Vote.JA, Arrays.asList(aj, sean, unknown, unknown, unknown, unknown, unknown));
@@ -229,11 +222,13 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 		myPlayer.setPartyMembership(PartyMembership.FASCIST);
 		myPlayer.setSecretRole(SecretRole.HITLER);
 		aj.setPartyMembership(PartyMembership.FASCIST);
+		aj.setPresident(true);
 		sean.setPartyMembership(PartyMembership.FASCIST);
+		sean.setChancellor(true);
 		GameData gameData = new GameData();
 		gameData.setPlayers(Arrays.asList(new PlayerData(), new PlayerData(), new PlayerData(), new PlayerData(), new PlayerData()));
 		
-		assertTrue("The AI should vote ja.", deductionProcessor.isVoteJa(Stream.of(aj, sean), PartyMembership.FASCIST, SecretRole.HITLER, gameData));
+		assertTrue("The AI should vote ja.", deductionProcessor.isVoteJa(PartyMembership.FASCIST, SecretRole.HITLER, gameData));
 	}
 	
 	private void testVoteHelper(Vote vote) {
@@ -326,49 +321,6 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 	}
 	
 	@Test
-	public void testLiberalPolicyPlayed() {
-		String[] args = {};
-		notification.setAction(new GameplayAction(Action.LIBERAL_POLICY, args));
-		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
-		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
-		myPlayer.setSecretRole(SecretRole.LIBERAL);
-		deductionProcessor.previousPresident = "Liberal";
-		deductionProcessor.updateSuspectedMembership(liberal, PartyMembership.LIBERAL, null, null);
-		deductionProcessor.previousChancellor = "Liberal2";
-		deductionProcessor.updateSuspectedMembership(liberal2, PartyMembership.LIBERAL, null, null);
-		
-		aj.setVote(Vote.JA);
-		sean.setVote(Vote.NEIN);
-		gameData.setPlayers(Arrays.asList(aj, sean, deadPlayer, fascist, liberal));
-		
-		processor.getActionToTake(notification);
-		
-		verifyExpectedSuspicions(Scenario.LIBERAL_POLICY_PLAYED);
-		assertTrue("policyOptionForNextGovernment flag should remain empty", deductionProcessor.policyOptionsForNextGovernment.isEmpty());
-	}
-	
-	@Test
-	public void testFascistPolicyPlayed() {
-		String[] args = {};
-		notification.setAction(new GameplayAction(Action.FASCIST_POLICY, args));
-		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
-		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
-		myPlayer.setSecretRole(SecretRole.LIBERAL);
-		aj.setVote(Vote.JA);
-		sean.setVote(Vote.NEIN);
-		gameData.setPlayers(Arrays.asList(aj, sean, deadPlayer, fascist, liberal));
-		deductionProcessor.previousPresident = "Liberal";
-		deductionProcessor.updateSuspectedMembership(liberal, PartyMembership.LIBERAL, null, null);
-		deductionProcessor.previousChancellor = "Fascist";
-		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
-		
-		processor.getActionToTake(notification);
-		
-		verifyExpectedSuspicions(Scenario.FASCIST_POLICY_PLAYED);
-		assertTrue("policyOptionsForNextGovernment should remain empty", deductionProcessor.policyOptionsForNextGovernment.isEmpty());
-	}
-	
-	@Test
 	public void testPolicyPlayed_VetoRequestor() {
 		deductionProcessor.vetoRequestor = Optional.of("Sean");
 		deductionProcessor.previousChancellor = "Sean";
@@ -382,12 +334,110 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 		gameData.setPlayers(Arrays.asList(aj, sean, deadPlayer, fascist, liberal));
 		deductionProcessor.previousPresident = "Fascist";
 		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
 		
 		processor.getActionToTake(notification);
 		
 		verifyExpectedSuspicions(Scenario.POLICY_PLAYED_VETO_REQUESTOR);
 		assertTrue("policyOptionsForNextGovernment should remain empty", deductionProcessor.policyOptionsForNextGovernment.isEmpty());
 		assertEquals("The vetoRequestor should be reset", Optional.empty(), deductionProcessor.vetoRequestor);
+	}
+	
+	@Test
+	public void testPolicyPlayed_ChancellorNoVeto() {
+		deductionProcessor.previousChancellor = "Sean";
+		String[] args = {};
+		notification.setAction(new GameplayAction(Action.FASCIST_POLICY, args));
+		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
+		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
+		myPlayer.setSecretRole(SecretRole.LIBERAL);
+		aj.setVote(Vote.JA);
+		sean.setVote(Vote.JA);
+		gameData.setPlayers(Arrays.asList(aj, sean, deadPlayer, fascist, liberal));
+		deductionProcessor.previousPresident = "Fascist";
+		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
+		
+		processor.getActionToTake(notification);
+		
+		verifyExpectedSuspicions(Scenario.POLICY_PLAYED_CHANCELLOR_NO_VETO);
+		assertTrue("policyOptionsForNextGovernment should remain empty", deductionProcessor.policyOptionsForNextGovernment.isEmpty());
+		assertEquals("The vetoRequestor should be reset", Optional.empty(), deductionProcessor.vetoRequestor);
+	}
+	
+	@Test
+	public void testPolicyPlayed_PresidentFailedVeto() {
+		deductionProcessor.previousPresident = "Sean";
+		deductionProcessor.vetoRequestor = Optional.of("Fascist");
+		String[] args = {};
+		notification.setAction(new GameplayAction(Action.FASCIST_POLICY, args));
+		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
+		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
+		myPlayer.setSecretRole(SecretRole.LIBERAL);
+		aj.setVote(Vote.JA);
+		sean.setVote(Vote.JA);
+		gameData.setPlayers(Arrays.asList(aj, sean, deadPlayer, fascist, liberal));
+		deductionProcessor.previousChancellor = "Fascist";
+		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
+		
+		processor.getActionToTake(notification);
+		
+		verifyExpectedSuspicions(Scenario.POLICY_PLAYED_PRESIDENT_FAILED_VETO);
+		assertTrue("policyOptionsForNextGovernment should remain empty", deductionProcessor.policyOptionsForNextGovernment.isEmpty());
+		assertEquals("The vetoRequestor should be reset", Optional.empty(), deductionProcessor.vetoRequestor);
+	}
+	
+	@Test
+	public void testPolicyPlayed_PresidentNoVeto() {
+		deductionProcessor.previousPresident = "Sean";
+		String[] args = {};
+		notification.setAction(new GameplayAction(Action.FASCIST_POLICY, args));
+		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
+		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
+		myPlayer.setSecretRole(SecretRole.LIBERAL);
+		aj.setVote(Vote.JA);
+		sean.setVote(Vote.JA);
+		gameData.setPlayers(Arrays.asList(aj, sean, deadPlayer, fascist, liberal));
+		deductionProcessor.previousChancellor = "Fascist";
+		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(fascist, PartyMembership.FASCIST, null, null);
+		
+		processor.getActionToTake(notification);
+		
+		verifyExpectedSuspicions(Scenario.POLICY_PLAYED_PRESIDENT_NO_VETO);
+		assertTrue("policyOptionsForNextGovernment should remain empty", deductionProcessor.policyOptionsForNextGovernment.isEmpty());
+		assertEquals("The vetoRequestor should be reset", Optional.empty(), deductionProcessor.vetoRequestor);
+	}
+	
+	@Test
+	public void testPolicyPlayedWithNeinVoter() {
+		String[] args = {};
+		notification.setAction(new GameplayAction(Action.LIBERAL_POLICY, args));
+		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
+		myPlayer.setPartyMembership(PartyMembership.LIBERAL);
+		myPlayer.setSecretRole(SecretRole.LIBERAL);
+		deductionProcessor.previousPresident = "Liberal";
+		deductionProcessor.updateSuspectedMembership(liberal, PartyMembership.LIBERAL, null, null);
+		deductionProcessor.updateSuspectedMembership(liberal, PartyMembership.LIBERAL, null, null);
+		deductionProcessor.updateSuspectedMembership(liberal, PartyMembership.LIBERAL, null, null);
+		deductionProcessor.previousChancellor = "Liberal2";
+		deductionProcessor.updateSuspectedMembership(liberal2, PartyMembership.LIBERAL, null, null);
+		deductionProcessor.updateSuspectedMembership(liberal2, PartyMembership.LIBERAL, null, null);
+		deductionProcessor.updateSuspectedMembership(liberal2, PartyMembership.LIBERAL, null, null);
+		
+		aj.setVote(Vote.JA);
+		sean.setVote(Vote.NEIN);
+		gameData.setPlayers(Arrays.asList(aj, sean, deadPlayer, fascist, liberal));
+		
+		processor.getActionToTake(notification);
+		
+		verifyExpectedSuspicions(Scenario.POLICY_PLAYED_WITH_NEIN_VOTER);
+		assertTrue("policyOptionForNextGovernment flag should remain empty", deductionProcessor.policyOptionsForNextGovernment.isEmpty());
 	}
 	
 	@Override
@@ -624,6 +674,7 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 	@Test
 	public void testSpecialElectionChosen_SuspectedLiberal() {
 		deductionProcessor.updateSuspectedMembership(sean, PartyMembership.LIBERAL, null, null);
+		deductionProcessor.updateSuspectedMembership(sean, PartyMembership.LIBERAL, null, null);
 		
 		testSpecialElectionChosen();
 		
@@ -633,13 +684,16 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 	@Test
 	public void testSpecialElectionChosen_SuspectedFascist() {
 		deductionProcessor.updateSuspectedMembership(sean, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(sean, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(sean, PartyMembership.FASCIST, null, null);
+		deductionProcessor.updateSuspectedMembership(sean, PartyMembership.FASCIST, null, null);
 		
 		testSpecialElectionChosen();
 		
 		verifyExpectedSuspicions(Scenario.SPECIAL_ELECTION_CHOSEN_SUSPECTED_FASCIST);
 	}
 	
-	private void testSpecialElectionChosen() {
+	protected void testSpecialElectionChosen() {
 		String[] args = {"Sean", "AJ"};
 		notification.setAction(new GameplayAction(Action.CHOOSE_NEXT_PRESIDENTIAL_CANDIDATE, args));
 		gameData.setPhase(GamePhase.PICKING_RUNNING_MATE);
@@ -766,6 +820,8 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 	}
 	
 	private void testPresidentVetoed() {
+		deductionProcessor.previousPresident = "Sean";
+		deductionProcessor.previousChancellor = "AJ";
 		deductionProcessor.vetoRequestor = Optional.of("Sean");
 		String[] args = {"AJ"};
 		notification.setAction(new GameplayAction(Action.PRESIDENT_VETO_YES, args));
