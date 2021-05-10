@@ -13,6 +13,7 @@ public class GameplayProcessorFactoryImpl implements GameplayProcessorFactory {
 			.put(1, SimpleGameplayProcessor.class)
 			.put(2, BooleanDeductionGameplayProcessor.class)
 			.put(3, WeightedDeductionGameplayProcessor.class)
+			.put(4, DeceptionGameplayProcessor.class)
 			.build();
 	
 	@Override

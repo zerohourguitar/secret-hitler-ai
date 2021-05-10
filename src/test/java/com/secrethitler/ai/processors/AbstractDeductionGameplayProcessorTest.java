@@ -152,7 +152,7 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 		deductionProcessor.updateSuspectedMembership(sean, PartyMembership.LIBERAL, null, null);
 		deductionProcessor.updateSuspectedMembership(sean, PartyMembership.LIBERAL, null, null);
 		
-		testVoteHelper(Vote.JA, Arrays.asList(aj, sean, unknown, unknown, unknown, unknown, unknown));
+		testVoteHelper(Vote.NEIN, Arrays.asList(aj, sean, unknown, unknown, unknown, unknown, unknown));
 		
 		verifyExpectedSuspicions(Scenario.VOTE_HITLER_BOT_OPPOSITE_SUSPECTED_MEMBERSHIPS);
 	}
@@ -226,7 +226,7 @@ public abstract class AbstractDeductionGameplayProcessorTest extends SimpleGamep
 		sean.setPartyMembership(PartyMembership.FASCIST);
 		sean.setChancellor(true);
 		GameData gameData = new GameData();
-		gameData.setPlayers(Arrays.asList(new PlayerData(), new PlayerData(), new PlayerData(), new PlayerData(), new PlayerData()));
+		gameData.setPlayers(Arrays.asList(new PlayerData(), new PlayerData(), new PlayerData(), aj, sean));
 		
 		assertTrue("The AI should vote ja.", deductionProcessor.isVoteJa(PartyMembership.FASCIST, SecretRole.HITLER, gameData));
 	}

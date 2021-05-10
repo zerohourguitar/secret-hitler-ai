@@ -3,7 +3,9 @@ package com.secrethitler.ai.processors;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import com.secrethitler.ai.dtos.GameData;
 import com.secrethitler.ai.dtos.PlayerData;
@@ -58,4 +60,12 @@ public class BooleanDeductionGameplayProcessor extends AbstractDeductionGameplay
 			team.forEach(player -> updateSuspectedMembership(player, govtSuspectedMembership - getMembershipSuspicion(player.getUsername()), suspicionAction, gameData));
 		}
 	}
+
+	@Override
+	protected Set<PlayerData> getMostExpectedFascists(GameData gameData) {
+		return gameData.getPlayers().stream()
+				.filter(player -> PartyMembership.FASCIST == player.getPartyMembership() || getMembershipSuspicion(player.getUsername()) < 0)
+				.collect(Collectors.toSet());
+	}
+	
 }

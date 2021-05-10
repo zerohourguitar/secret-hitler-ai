@@ -11,4 +11,9 @@ public class RandomUtilImpl implements RandomUtil {
 		int index = RANDOM_GENERATOR.nextInt(list.size());
 		return list.get(index);
 	}
+
+	@Override
+	public double getRandomNumber() {
+		return RANDOM_GENERATOR.nextInt(100) / 100;
+	}
 }

@@ -4,4 +4,5 @@ import java.util.List;
 
 public interface RandomUtil {
 	<T> T getRandomItemFromList(List<T> list);
+	double getRandomNumber();
 }

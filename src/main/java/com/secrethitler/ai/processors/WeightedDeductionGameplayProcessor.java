@@ -2,11 +2,15 @@ package com.secrethitler.ai.processors;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.Map.Entry;
 import java.util.function.BiFunction;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.math3.util.CombinatoricsUtils;
@@ -92,6 +96,10 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 		return CombinatoricsUtils.binomialCoefficient(n, k);
 	}
 	
+	protected static int getNumberOfFascistsFromNumberOfPlayers(int players) {
+		return (players - 5) / 2 + 2;
+	}
+	
 	private final Map<SuspicionAction, BiFunction<Integer, GameData, Integer>> suspicionActionToWeightedSuspicionFunctionMap = 
 			ImmutableMap.<SuspicionAction, BiFunction<Integer, GameData, Integer>>builder()
 			.put(SuspicionAction.GOVERNMENT_DENIED_VOTE, this::governmentDenied)
@@ -155,6 +163,37 @@ public class WeightedDeductionGameplayProcessor extends AbstractDeductionGamepla
 	protected void updateSuspectedMembershipsForGovernment(final List<PlayerData> team,
 			final SuspicionAction suspicionAction, final GameData gameData, int govtSuspectedMembership) {
 		team.forEach(player -> updateSuspectedMembership(player, govtSuspectedMembership - getMembershipSuspicion(player.getUsername()), suspicionAction, gameData));
+	}
+	
+	@Override
+	protected Set<PlayerData> getMostExpectedFascists(GameData gameData) {
+		Set<PlayerData> mostSuspectedFascists = gameData.getPlayers().stream()
+				.filter(player -> PartyMembership.FASCIST == player.getPartyMembership())
+				.collect(Collectors.toSet());
+		int totalFascists = getNumberOfFascistsFromNumberOfPlayers(gameData.getPlayers().size());
+		List<Set<PlayerData>> playersOrderedBySuspicion = getPlayersOrderedBySuspicion(gameData);
+		Iterator<Set<PlayerData>> it = playersOrderedBySuspicion.iterator();
+		while(it.hasNext()) {
+			Set<PlayerData> players = it.next();
+			if (mostSuspectedFascists.size() + players.size() > totalFascists) {
+				break;
+			}
+			mostSuspectedFascists.addAll(players);
+		}
+		return mostSuspectedFascists;
+	}
+
+	protected List<Set<PlayerData>> getPlayersOrderedBySuspicion(GameData gameData) {
+		return getPlayersOrderedBySuspicion(gameData.getPlayers());
+	}
+	
+	protected List<Set<PlayerData>> getPlayersOrderedBySuspicion(List<PlayerData> players) {
+		return players.stream()
+				.collect(Collectors.groupingBy(player -> getMembershipSuspicion(player.getUsername()), Collectors.toSet()))
+				.entrySet().stream()
+				.sorted((entry1, entry2) -> entry1.getKey().compareTo(entry2.getKey()))
+				.map(Entry::getValue)
+				.collect(Collectors.toList());
 	}
 	
 	private int defaultWeightedSuspicionFunction(final int suspicion, final GameData gameData) {

@@ -52,7 +52,7 @@ public class SimpleGameplayProcessor implements GameplayProcessor {
 	
 	protected static final Set<SecretRole> KNOWN_NON_HITLER_ROLES = ImmutableSet.of(SecretRole.FASCIST, SecretRole.LIBERAL);
 	
-	private final RandomUtil randomUtil;
+	protected final RandomUtil randomUtil;
 	private final Map<GamePhase, Function<GameData, Optional<GameplayAction>>> phaseToFunctionMap;
 	protected final String username;
 	protected boolean vetoUsedThisTurn = false;
